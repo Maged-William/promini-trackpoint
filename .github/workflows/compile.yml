@@ -1,0 +1,45 @@
+name: Compile Arduino Firmware
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install AVR Board Manager
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr
+
+      - name: Compile SPI Slave Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build trackpoint-spi-slave/
+          rm -f build/*.elf build/*.bin build/*.with_bootloader.*
+
+      - name: Compile Diagnostic Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-diag trackpoint-diag/
+          rm -f build-diag/*.elf build-diag/*.bin build-diag/*.with_bootloader.*
+
+      - name: Upload SPI Slave Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-spi-slave
+          path: build/
+
+      - name: Upload Diagnostic Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-diag
+          path: build-diag/
