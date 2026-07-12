@@ -67,9 +67,6 @@ ISR(PCINT0_vect) {
 ISR(SPI_STC_vect) {
     spi_byte_count++;
     uint8_t rx = SPDR;
-    // NOT writing SPDR=0x00 here — PCINT pre-loads 0x00 on CS falling edge.
-    // Writing SPDR mid-byte may race with the hardware shift-register load
-    // on the n-byte boundary, causing spurious 0xFF on MISO.
 
     if (byte_pos == 0) {
         if (rx & 0x80) {
@@ -78,7 +75,12 @@ ISR(SPI_STC_vect) {
             is_write = 0;
             rx &= 0x7F;
             if (rx == 0x12) {
-                burst_idx = 0;
+                // Pre-load FIRST data byte immediately so it lands at
+                // buf[1] (1-byte shift).  Start index at 1 since burst[0]
+                // is written below; subsequent bytes flow through the
+                // else-if path.
+                burst_idx = 1;
+                SPDR      = burst[0];
             }
         }
         byte_pos = 1;
