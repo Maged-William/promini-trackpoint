@@ -23,19 +23,10 @@ jobs:
           arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build trackpoint-spi-slave/
           rm -f build/*.elf build/*.bin build/*.with_bootloader.*
 
-      - name: Compile Diagnostic Sketch
-        run: |
-          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-diag trackpoint-diag/
-          rm -f build-diag/*.elf build-diag/*.bin build-diag/*.with_bootloader.*
-
       - name: Upload SPI Slave Binary
         uses: actions/upload-artifact@v4
         with:
           name: pro-mini-spi-slave
           path: build/
 
-      - name: Upload Diagnostic Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: pro-mini-diag
-          path: build-diag/
+
