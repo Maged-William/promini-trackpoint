@@ -8,9 +8,18 @@
 //   D13 (PB5/SCK)  <- P0.08 (SCK)
 //   D2  (PD2)      -> P0.10 (MOT/IRQ, active LOW)
 //
-// ISR writes SPDR=0x00 BEFORE any other work, solving the byte-shift
-// race that caused random 500px jumps. Init checks are skipped in
-// the ZMK driver (observation + product ID).
+// Strategy: nRF52 SPIM has near-zero inter-byte gap, so the AVR SPI
+// ISR is always ~4 cycles late.  This causes a deterministic 1-byte
+// shift  —  master buf[N] = AVR burst[N-1] (for N>=1).
+//
+// Compensation: burst array layout is X_L at [0], Y_L at [1],
+// XY_H at [2], which the driver reads at buf[1-3] perfectly.
+// At 1 MHz SPI (8 us/byte, 64 AVR cycles) the ISR (~25 cycles)
+// completes within the current byte, reliably pre‑loading the
+// write buffer for byte N+2.
+//
+// Init checks (observation + product ID) are bypassed in the
+// ZMK driver (Exp02).
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -46,13 +55,15 @@ static volatile uint8_t is_write;
 static volatile uint8_t burst[6];
 
 ISR(PCINT0_vect) {
-    byte_pos = 0;
-    SPDR     = 0x00;
+    if (!(PINB & _BV(PB2))) {     // CS falling edge only
+        byte_pos = 0;
+        SPDR     = 0x00;
+    }
 }
 
 ISR(SPI_STC_vect) {
     uint8_t rx = SPDR;
-    SPDR = 0x00;  // ← FIRST: guarantee next byte sends 0x00
+    SPDR = 0x00;    // safe default; overwritten below for burst reads
 
     if (byte_pos == 0) {
         if (rx & 0x80) {
@@ -108,8 +119,8 @@ void setup() {
 
     Serial.begin(9600);
     Serial.println("--- PMW3610 emulator Exp03 ---");
-    Serial.println("buf[0]=0x00 (motion flag=0, ignored by driver)");
-    Serial.println("buf[1-3]=correct X_L/Y_L/XY_H");
+    Serial.println("1-byte shift compensation: burst[0-2]=X_L,Y_L,XY_H");
+    Serial.println("Master sees buf[1-3]=burst[0-2] -> correct X/Y");
 }
 
 void loop() {
