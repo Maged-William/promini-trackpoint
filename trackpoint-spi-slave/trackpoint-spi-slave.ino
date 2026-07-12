@@ -27,7 +27,7 @@
 #include <Arduino.h>
 
 #define MOT_PIN      2
-#define PULSE_MS     2
+#define PULSE_US     100   // short pulse — MOT returns HIGH before work callback finishes, preventing IRQ cascade
 #define PERIOD_MS    500
 
 static const uint8_t circle[16][3] PROGMEM = {
@@ -67,7 +67,9 @@ ISR(PCINT0_vect) {
 ISR(SPI_STC_vect) {
     spi_byte_count++;
     uint8_t rx = SPDR;
-    SPDR = 0x00;    // safe default; overwritten for burst data below
+    // NOT writing SPDR=0x00 here — PCINT pre-loads 0x00 on CS falling edge.
+    // Writing SPDR mid-byte may race with the hardware shift-register load
+    // on the n-byte boundary, causing spurious 0xFF on MISO.
 
     if (byte_pos == 0) {
         if (rx & 0x80) {
@@ -126,10 +128,11 @@ void setup() {
 }
 
 void loop() {
-    static unsigned long last_pulse  = 0;
-    static bool         pulsed       = false;
-    static uint8_t      step         = 0;
-    static uint8_t      last_spi_cnt = 0;
+    static unsigned long last_step    = 0;
+    static bool          pulsed       = false;
+    static unsigned long last_pulse_us = 0;
+    static uint8_t       step         = 0;
+    static uint8_t       last_spi_cnt = 0;
     static unsigned long last_spi_print = 0;
 
     if (millis() - last_spi_print >= 2000) {
@@ -147,7 +150,7 @@ void loop() {
         last_spi_print = millis();
     }
 
-    if (!pulsed && (millis() - last_pulse >= PERIOD_MS)) {
+    if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
         uint8_t i = step & 0x0F;
         uint8_t xl  = pgm_read_byte(&circle[i][0]);
         uint8_t yl  = pgm_read_byte(&circle[i][1]);
@@ -167,9 +170,10 @@ void loop() {
         step++;
 
         digitalWrite(MOT_PIN, LOW);
-        pulsed      = true;
-        last_pulse  = millis();
-    } else if (pulsed && (millis() - last_pulse >= PULSE_MS)) {
+        pulsed        = true;
+        last_pulse_us = micros();
+        last_step     = millis();
+    } else if (pulsed && (micros() - last_pulse_us >= PULSE_US)) {
         digitalWrite(MOT_PIN, HIGH);
         pulsed = false;
     }
