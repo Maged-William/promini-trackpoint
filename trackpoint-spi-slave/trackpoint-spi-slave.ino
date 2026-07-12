@@ -29,6 +29,7 @@
 #define MOT_PIN      2
 #define PULSE_US     100   // short pulse — MOT returns HIGH before work callback finishes, preventing IRQ cascade
 #define PERIOD_MS    500
+// #define UPDATE_CIRCLE   // uncomment to cycle through circle steps
 
 static const uint8_t circle[16][3] PROGMEM = {
     {0x03, 0x00, 0x00},  //   0: X=3,  Y=0
@@ -116,12 +117,12 @@ void setup() {
     PCICR  |= _BV(PCIE0);
     PCMSK0 |= _BV(PCINT2);
 
-    burst[0] = 0x01;
-    burst[1] = 0x01;
-    burst[2] = 0x00;
-    burst[3] = 0x80;
-    burst[4] = 0x30;
-    burst[5] = 0x42;
+    burst[0] = 0x11;
+    burst[1] = 0x22;
+    burst[2] = 0x33;
+    burst[3] = 0x44;
+    burst[4] = 0x55;
+    burst[5] = 0x66;
 
     Serial.begin(9600);
     Serial.println("--- PMW3610 emulator Exp03 ---");
@@ -153,6 +154,7 @@ void loop() {
     }
 
     if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
+#ifdef UPDATE_CIRCLE
         uint8_t i = step & 0x0F;
         uint8_t xl  = pgm_read_byte(&circle[i][0]);
         uint8_t yl  = pgm_read_byte(&circle[i][1]);
@@ -170,6 +172,7 @@ void loop() {
 
         update_circle_step(step);
         step++;
+#endif // UPDATE_CIRCLE
 
         digitalWrite(MOT_PIN, LOW);
         pulsed        = true;
