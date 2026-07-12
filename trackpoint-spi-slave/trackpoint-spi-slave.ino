@@ -56,16 +56,18 @@ static volatile uint8_t burst[6];
 static volatile uint8_t spi_byte_count;
 
 ISR(PCINT0_vect) {
-    if (!(PINB & _BV(PB2))) {     // CS falling edge only
+    if (!(PINB & _BV(PB2))) {     // CS falling edge → new transaction
         byte_pos = 0;
-        SPDR     = 0x00;
+        burst_idx = 0xFF;         // not in burst mode yet
+        is_write  = 0;
+        SPDR      = 0x00;
     }
 }
 
 ISR(SPI_STC_vect) {
     spi_byte_count++;
     uint8_t rx = SPDR;
-    SPDR = 0x00;    // safe default; overwritten below for burst reads
+    SPDR = 0x00;    // safe default; overwritten for burst data below
 
     if (byte_pos == 0) {
         if (rx & 0x80) {
@@ -75,8 +77,6 @@ ISR(SPI_STC_vect) {
             rx &= 0x7F;
             if (rx == 0x12) {
                 burst_idx = 0;
-            } else {
-                burst_idx = 0xFF;
             }
         }
         byte_pos = 1;
@@ -84,7 +84,7 @@ ISR(SPI_STC_vect) {
         is_write = 0;
         byte_pos = 0;
     } else if (burst_idx < 6) {
-        SPDR = burst[burst_idx++];  // override 0x00 for motion data
+        SPDR = burst[burst_idx++];
     }
 }
 
