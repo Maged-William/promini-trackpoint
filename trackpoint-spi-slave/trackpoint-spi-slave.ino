@@ -1,25 +1,17 @@
-// PMW3610 SPI Slave Emulator — Exp03
-// Pro Mini 3.3V 8MHz (ATmega328P)
+// PMW3610 SPI Slave Emulator — Exp04
+// Per-byte SPI transactions with CS deassertion between each byte.
+// The nRF52 sends each byte as a separate transaction (CS↓, 1 byte, CS↑).
+// CS deassertion gives the AVR time to read SPDR and write the next response,
+// eliminating the single-buffered SPDR overwrite race (Exp03 root cause).
 //
-// SPI wiring to NiceNano:
-//   D10 (PB2/SS)   <- P0.20 (CS)
-//   D11 (PB3/MOSI) <- P0.17 (MOSI)
-//   D12 (PB4/MISO) -> P0.06 (MISO)
-//   D13 (PB5/SCK)  <- P0.08 (SCK)
-//   D2  (PD2)      -> P0.10 (MOT/IRQ, active LOW)
+// Writes remain as 2-byte continuous transactions — the 8µs window (at 1MHz)
+// between bytes is enough for the SPIF polling loop to catch the address byte
+// before the data byte overwrites SPDR.
 //
-// Strategy: nRF52 SPIM has near-zero inter-byte gap, so the AVR SPI
-// ISR is always ~4 cycles late.  This causes a deterministic 1-byte
-// shift  —  master buf[N] = AVR burst[N-1] (for N>=1).
-//
-// Compensation: burst array layout is X_L at [0], Y_L at [1],
-// XY_H at [2], which the driver reads at buf[1-3] perfectly.
-// At 1 MHz SPI (8 us/byte, 64 AVR cycles) the ISR (~25 cycles)
-// completes within the current byte, reliably pre‑loading the
-// write buffer for byte N+2.
-//
-// Init checks (observation + product ID) are bypassed in the
-// ZMK driver (Exp02).
+// State machine:
+//   S_IDLE       → address byte (first byte after CS↓)
+//   S_ADDR_RCVD  → single register data (read or write)
+//   S_BURST      → burst read data (sequential register values)
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -27,71 +19,41 @@
 #include <Arduino.h>
 
 #define MOT_PIN      2
-#define PULSE_US     100   // short pulse — MOT returns HIGH before work callback finishes, preventing IRQ cascade
+#define PULSE_US     100
 #define PERIOD_MS    500
-// #define UPDATE_CIRCLE   // uncomment to cycle through circle steps
 
+// Circle pattern: 16 steps of {X_L, Y_L, XY_H} forming a smooth circle
 static const uint8_t circle[16][3] PROGMEM = {
-    {0x03, 0x00, 0x00},  //   0: X=3,  Y=0
-    {0x03, 0x01, 0x00},  //   1: X=3,  Y=1
-    {0x02, 0x02, 0x00},  //   2: X=2,  Y=2
-    {0x01, 0x03, 0x00},  //   3: X=1,  Y=3
-    {0x00, 0x03, 0x00},  //   4: X=0,  Y=3
-    {0xFF, 0x03, 0xF0},  //   5: X=-1, Y=3
-    {0xFE, 0x02, 0xF0},  //   6: X=-2, Y=2
-    {0xFD, 0x01, 0xF0},  //   7: X=-3, Y=1
-    {0xFD, 0x00, 0xF0},  //   8: X=-3, Y=0
-    {0xFD, 0xFF, 0xFF},  //   9: X=-3, Y=-1
-    {0xFE, 0xFE, 0xFF},  //  10: X=-2, Y=-2
-    {0xFF, 0xFD, 0xFF},  //  11: X=-1, Y=-3
-    {0x00, 0xFD, 0x0F},  //  12: X=0,  Y=-3
-    {0x01, 0xFD, 0x0F},  //  13: X=1,  Y=-3
-    {0x02, 0xFE, 0x0F},  //  14: X=2,  Y=-2
-    {0x03, 0xFF, 0x0F},  //  15: X=3,  Y=-1
+    {0x03, 0x00, 0x00},  //  0: X=3,  Y=0
+    {0x03, 0x01, 0x00},  //  1: X=3,  Y=1
+    {0x02, 0x02, 0x00},  //  2: X=2,  Y=2
+    {0x01, 0x03, 0x00},  //  3: X=1,  Y=3
+    {0x00, 0x03, 0x00},  //  4: X=0,  Y=3
+    {0xFF, 0x03, 0xF0},  //  5: X=-1, Y=3
+    {0xFE, 0x02, 0xF0},  //  6: X=-2, Y=2
+    {0xFD, 0x01, 0xF0},  //  7: X=-3, Y=1
+    {0xFD, 0x00, 0xF0},  //  8: X=-3, Y=0
+    {0xFD, 0xFF, 0xFF},  //  9: X=-3, Y=-1
+    {0xFE, 0xFE, 0xFF},  // 10: X=-2, Y=-2
+    {0xFF, 0xFD, 0xFF},  // 11: X=-1, Y=-3
+    {0x00, 0xFD, 0x0F},  // 12: X=0,  Y=-3
+    {0x01, 0xFD, 0x0F},  // 13: X=1,  Y=-3
+    {0x02, 0xFE, 0x0F},  // 14: X=2,  Y=-2
+    {0x03, 0xFF, 0x0F},  // 15: X=3,  Y=-1
 };
 
-static volatile uint8_t byte_pos;
-static volatile uint8_t burst_idx;
-static volatile uint8_t is_write;
-static volatile uint8_t burst[6];
+#define BURST_SIZE     7
+#define REG_BURST      0x12
+
+enum { S_IDLE, S_ADDR_RCVD, S_BURST };
+
+static volatile uint8_t burst[BURST_SIZE];
+static uint8_t state;
+static uint8_t last_addr;
+static uint8_t write_pending;
+static uint8_t burst_idx;
 static volatile uint8_t spi_byte_count;
-
-ISR(PCINT0_vect) {
-    if (!(PINB & _BV(PB2))) {     // CS falling edge → new transaction
-        byte_pos = 0;
-        burst_idx = 0xFF;         // not in burst mode yet
-        is_write  = 0;
-        SPDR      = 0x00;
-    }
-}
-
-ISR(SPI_STC_vect) {
-    spi_byte_count++;
-    uint8_t rx = SPDR;
-
-    if (byte_pos == 0) {
-        if (rx & 0x80) {
-            is_write = 1;
-        } else {
-            is_write = 0;
-            rx &= 0x7F;
-            if (rx == 0x12) {
-                // Pre-load FIRST data byte immediately so it lands at
-                // buf[1] (1-byte shift).  Start index at 1 since burst[0]
-                // is written below; subsequent bytes flow through the
-                // else-if path.
-                burst_idx = 1;
-                SPDR      = burst[0];
-            }
-        }
-        byte_pos = 1;
-    } else if (is_write) {
-        is_write = 0;
-        byte_pos = 0;
-    } else if (burst_idx < 6) {
-        SPDR = burst[burst_idx++];
-    }
-}
+static uint8_t regs[128];
 
 static void update_circle_step(uint8_t step) {
     uint8_t i = step & 0x0F;
@@ -100,10 +62,16 @@ static void update_circle_step(uint8_t step) {
     uint8_t xyh = pgm_read_byte(&circle[i][2]);
 
     cli();
-    burst[0] = xl;
-    burst[1] = yl;
-    burst[2] = xyh;
+    burst[1] = xl;
+    burst[2] = yl;
+    burst[3] = xyh;
     sei();
+}
+
+ISR(PCINT0_vect) {
+    // CS changed state. For CS falling edge, the SPI hardware
+    // automatically shifts out the SPDR value pre-loaded by the
+    // previous SPIF handler — no action needed here.
 }
 
 void setup() {
@@ -111,33 +79,96 @@ void setup() {
     digitalWrite(MOT_PIN, HIGH);
 
     pinMode(MISO, OUTPUT);
-    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
+    SPCR = _BV(SPE) | _BV(CPOL) | _BV(CPHA);  // SPI slave, mode 3
     SPDR = 0x00;
 
     PCICR  |= _BV(PCIE0);
-    PCMSK0 |= _BV(PCINT2);
+    PCMSK0 |= _BV(PCINT2);  // PB2 = SS/D10 (CS)
 
-    burst[0] = 0x11;
-    burst[1] = 0x22;
-    burst[2] = 0x33;
-    burst[3] = 0x44;
-    burst[4] = 0x55;
-    burst[5] = 0x66;
+    // Initialize burst with circle step 0 values
+    burst[0] = 0x01;  // MOTION — motion detected
+    burst[1] = 0x03;  // DELTA_X_L
+    burst[2] = 0x00;  // DELTA_Y_L
+    burst[3] = 0x00;  // DELTA_XY_H
+    burst[4] = 0x00;  // SQUAL
+    burst[5] = 0x00;  // SHUTTER_H
+    burst[6] = 0x00;  // SHUTTER_L
+
+    // Register file (reads use these for single-register access)
+    // All zeros by default (global), which is fine.
+
+    state = S_IDLE;
 
     Serial.begin(9600);
-    Serial.println("--- PMW3610 emulator Exp03 ---");
-    Serial.println("1-byte shift compensation: burst[0-2]=X_L,Y_L,XY_H");
-    Serial.println("Master sees buf[1-3]=burst[0-2] -> correct X/Y");
+    Serial.println("--- PMW3610 emulator Exp04 ---");
+    Serial.println("Per-byte transactions + CS deassertion");
 }
 
 void loop() {
-    static unsigned long last_step    = 0;
-    static bool          pulsed       = false;
+    static unsigned long last_step     = 0;
+    static bool          pulsed        = false;
     static unsigned long last_pulse_us = 0;
-    static uint8_t       step         = 0;
-    static uint8_t       last_spi_cnt = 0;
+    static uint8_t       step          = 0;
+    static uint8_t       last_spi_cnt  = 0;
     static unsigned long last_spi_print = 0;
 
+    // ── SPI byte handling (poll SPIF) ──
+    {
+        uint8_t spsr_val = SPSR;
+        if (spsr_val & _BV(SPIF)) {
+            uint8_t received = SPDR;  // SPIF cleared (SPSR read above, now SPDR)
+            spi_byte_count++;
+
+            if (state == S_IDLE) {
+                last_addr = received & 0x7F;
+                write_pending = received & 0x80;
+
+                if (write_pending) {
+                    // Write: address received, expect data byte (same CS assertion)
+                    state = S_ADDR_RCVD;
+                    SPDR = 0x00;
+                } else if (last_addr == REG_BURST) {
+                    // Burst read start
+                    state = S_BURST;
+                    burst_idx = 0;
+                    SPDR = burst[0];
+                } else {
+                    // Single register read
+                    state = S_ADDR_RCVD;
+                    SPDR = regs[last_addr];
+                }
+            } else if (state == S_ADDR_RCVD) {
+                if (write_pending) {
+                    regs[last_addr] = received;
+                    write_pending = 0;
+                }
+                state = S_IDLE;
+                SPDR = 0x00;
+            } else if (state == S_BURST) {
+                burst_idx++;
+                if (burst_idx < BURST_SIZE) {
+                    SPDR = burst[burst_idx];
+                } else {
+                    state = S_IDLE;
+                    SPDR = 0x00;
+                }
+            }
+        }
+    }
+
+    // ── MOT pin pulse (triggers ZMK burst read) ──
+    if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
+        update_circle_step(step++);
+        digitalWrite(MOT_PIN, LOW);
+        pulsed = true;
+        last_pulse_us = micros();
+        last_step = millis();
+    } else if (pulsed && (micros() - last_pulse_us >= PULSE_US)) {
+        digitalWrite(MOT_PIN, HIGH);
+        pulsed = false;
+    }
+
+    // ── Serial debug ──
     if (millis() - last_spi_print >= 2000) {
         uint8_t cnt = spi_byte_count;
         if (cnt != last_spi_cnt) {
@@ -151,35 +182,5 @@ void loop() {
             Serial.println("SPI bytes: 0 (no activity)");
         }
         last_spi_print = millis();
-    }
-
-    if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
-#ifdef UPDATE_CIRCLE
-        uint8_t i = step & 0x0F;
-        uint8_t xl  = pgm_read_byte(&circle[i][0]);
-        uint8_t yl  = pgm_read_byte(&circle[i][1]);
-        uint8_t xyh = pgm_read_byte(&circle[i][2]);
-
-        Serial.print("step=");
-        Serial.print(i);
-        Serial.print(" xl=0x");
-        Serial.print(xl, HEX);
-        Serial.print(" yl=0x");
-        Serial.print(yl, HEX);
-        Serial.print(" xyh=0x");
-        Serial.print(xyh, HEX);
-        Serial.println();
-
-        update_circle_step(step);
-        step++;
-#endif // UPDATE_CIRCLE
-
-        digitalWrite(MOT_PIN, LOW);
-        pulsed        = true;
-        last_pulse_us = micros();
-        last_step     = millis();
-    } else if (pulsed && (micros() - last_pulse_us >= PULSE_US)) {
-        digitalWrite(MOT_PIN, HIGH);
-        pulsed = false;
     }
 }
