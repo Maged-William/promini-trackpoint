@@ -1,4 +1,4 @@
-// PMW3610 SPI Slave Emulator — Exp02 debug
+// PMW3610 SPI Slave Emulator — Exp03
 // Pro Mini 3.3V 8MHz (ATmega328P)
 //
 // SPI wiring to NiceNano:
@@ -8,9 +8,9 @@
 //   D13 (PB5/SCK)  <- P0.08 (SCK)
 //   D2  (PD2)      -> P0.10 (MOT/IRQ, active LOW)
 //
-// Generates a tiny slow circle (radius 3, 8s/rotation) and
-// prints every step over Serial for cross-checking with the
-// NiceNano PMW3610 driver logs.
+// ISR writes SPDR=0x00 BEFORE any other work, solving the byte-shift
+// race that caused random 500px jumps. Init checks are skipped in
+// the ZMK driver (observation + product ID).
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -21,7 +21,6 @@
 #define PULSE_MS     2
 #define PERIOD_MS    500
 
-// 16-step circle, radius 3, {X_low, Y_low, XY_high}
 static const uint8_t circle[16][3] PROGMEM = {
     {0x03, 0x00, 0x00},  //   0: X=3,  Y=0
     {0x03, 0x01, 0x00},  //   1: X=3,  Y=1
@@ -44,8 +43,6 @@ static const uint8_t circle[16][3] PROGMEM = {
 static volatile uint8_t byte_pos;
 static volatile uint8_t burst_idx;
 static volatile uint8_t is_write;
-
-static uint8_t rsp0[128];
 static volatile uint8_t burst[6];
 
 ISR(PCINT0_vect) {
@@ -55,15 +52,14 @@ ISR(PCINT0_vect) {
 
 ISR(SPI_STC_vect) {
     uint8_t rx = SPDR;
+    SPDR = 0x00;  // ← FIRST: guarantee next byte sends 0x00
 
     if (byte_pos == 0) {
         if (rx & 0x80) {
             is_write = 1;
-            SPDR     = 0x00;
         } else {
-            is_write  = 0;
-            rx       &= 0x7F;
-            SPDR      = rsp0[rx];
+            is_write = 0;
+            rx &= 0x7F;
             if (rx == 0x12) {
                 burst_idx = 0;
             } else {
@@ -72,13 +68,10 @@ ISR(SPI_STC_vect) {
         }
         byte_pos = 1;
     } else if (is_write) {
-        is_write  = 0;
-        byte_pos  = 0;
-        SPDR      = 0x00;
+        is_write = 0;
+        byte_pos = 0;
     } else if (burst_idx < 6) {
-        SPDR = burst[burst_idx++];
-    } else {
-        SPDR = 0x00;
+        SPDR = burst[burst_idx++];  // override 0x00 for motion data
     }
 }
 
@@ -106,27 +99,17 @@ void setup() {
     PCICR  |= _BV(PCIE0);
     PCMSK0 |= _BV(PCINT2);
 
-    for (uint8_t i = 0; i < 128; i++) rsp0[i] = 0x00;
-    rsp0[0x02] = 0x80;
-    rsp0[0x03] = 0x01;
-    rsp0[0x04] = 0x01;
-    rsp0[0x05] = 0x00;
-    rsp0[0x2D] = 0x0F;
-    rsp0[0x3F] = 0x3E;
-    rsp0[0x12] = 0x80;
-
-    burst[0] = 0x01;  // X low
-    burst[1] = 0x01;  // Y low
-    burst[2] = 0x00;  // XY high
-    burst[3] = 0x80;  // SQUAL
-    burst[4] = 0x30;  // Shutter high
-    burst[5] = 0x42;  // Shutter low
+    burst[0] = 0x01;
+    burst[1] = 0x01;
+    burst[2] = 0x00;
+    burst[3] = 0x80;
+    burst[4] = 0x30;
+    burst[5] = 0x42;
 
     Serial.begin(9600);
-    Serial.println("--- PMW3610 emulator debug ---");
-    Serial.print("Burst bytes send order: [0x80, ");
-    Serial.print("Xlo, Ylo, XYhi, SQUAL, ShutH, ShutL]");
-    Serial.println();
+    Serial.println("--- PMW3610 emulator Exp03 ---");
+    Serial.println("buf[0]=0x00 (motion flag=0, ignored by driver)");
+    Serial.println("buf[1-3]=correct X_L/Y_L/XY_H");
 }
 
 void loop() {
