@@ -53,6 +53,7 @@ static volatile uint8_t byte_pos;
 static volatile uint8_t burst_idx;
 static volatile uint8_t is_write;
 static volatile uint8_t burst[6];
+static volatile uint8_t spi_byte_count;
 
 ISR(PCINT0_vect) {
     if (!(PINB & _BV(PB2))) {     // CS falling edge only
@@ -62,6 +63,7 @@ ISR(PCINT0_vect) {
 }
 
 ISR(SPI_STC_vect) {
+    spi_byte_count++;
     uint8_t rx = SPDR;
     SPDR = 0x00;    // safe default; overwritten below for burst reads
 
@@ -124,9 +126,26 @@ void setup() {
 }
 
 void loop() {
-    static unsigned long last_pulse = 0;
-    static bool         pulsed      = false;
-    static uint8_t      step        = 0;
+    static unsigned long last_pulse  = 0;
+    static bool         pulsed       = false;
+    static uint8_t      step         = 0;
+    static uint8_t      last_spi_cnt = 0;
+    static unsigned long last_spi_print = 0;
+
+    if (millis() - last_spi_print >= 2000) {
+        uint8_t cnt = spi_byte_count;
+        if (cnt != last_spi_cnt) {
+            Serial.print("SPI bytes: ");
+            Serial.print(cnt);
+            Serial.print(" (+");
+            Serial.print(cnt - last_spi_cnt);
+            Serial.println(")");
+            last_spi_cnt = cnt;
+        } else {
+            Serial.println("SPI bytes: 0 (no activity)");
+        }
+        last_spi_print = millis();
+    }
 
     if (!pulsed && (millis() - last_pulse >= PERIOD_MS)) {
         uint8_t i = step & 0x0F;
