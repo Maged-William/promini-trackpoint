@@ -44,11 +44,11 @@ static void update_from_ps2(int8_t x, int8_t y) {
         if (ramp > 20) ramp = 20;
     }
 
-    // Power curve: output = x * ramp / 80
-    // At ramp=0: zero output (~35ms quiet zone before cursor reacts)
-    // At ramp=20: output = x/4 — matches original Exp07 sensitivity
-    int16_t out_x = ((int16_t)x * ramp) / 80;
-    int16_t out_y = ((int16_t)y * ramp) / 80;
+    // Power curve: output = x * ramp * 3 / 40
+    // At ramp=0: zero output (1 tick dead zone, imperceptible)
+    // At ramp=20: output = x * 60 / 40 = 1.5x — 6x peak via /4 ZMK scaler
+    int16_t out_x = ((int16_t)x * ramp * 3) / 40;
+    int16_t out_y = ((int16_t)y * ramp * 3) / 40;
 
     uint16_t x_12 = (out_x >= 0) ? (uint16_t)out_x : (uint16_t)(4096 + out_x);
     uint16_t y_12 = (out_y >= 0) ? (uint16_t)out_y : (uint16_t)(4096 + out_y);
