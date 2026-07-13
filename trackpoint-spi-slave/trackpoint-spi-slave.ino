@@ -34,6 +34,7 @@ static uint8_t regs[128];
 static unsigned long ps2_last_pkt_ms = 0;
 
 static void update_from_ps2(int8_t x, int8_t y) {
+    x = -x;  // reverse X axis — TrackPoint direction vs screen
     uint16_t x_12 = (x >= 0) ? (uint16_t)x : (uint16_t)(4096 + x);
     uint16_t y_12 = (y >= 0) ? (uint16_t)y : (uint16_t)(4096 + y);
 
