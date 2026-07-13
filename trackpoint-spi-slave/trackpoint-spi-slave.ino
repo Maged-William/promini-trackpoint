@@ -68,10 +68,48 @@ static void update_rect_step(void) {
     }
 }
 
+// ── SPI Interrupt ──
+// Handles every byte immediately, even during Serial.print.
+// Eliminates the polling gap that corrupts the state machine.
+ISR(SPI_STC_vect) {
+    uint8_t received = SPDR;  // clears SPIF
+    spi_byte_count++;
+
+    if (state == S_IDLE) {
+        last_addr = received & 0x7F;
+        write_pending = received & 0x80;
+
+        if (write_pending) {
+            state = S_ADDR_RCVD;
+            SPDR = 0x00;
+        } else if (last_addr == REG_BURST) {
+            state = S_BURST;
+            burst_idx = 0;
+            SPDR = burst[0];
+        } else {
+            state = S_ADDR_RCVD;
+            SPDR = regs[last_addr];
+        }
+    } else if (state == S_ADDR_RCVD) {
+        if (write_pending) {
+            regs[last_addr] = received;
+            write_pending = 0;
+        }
+        state = S_IDLE;
+        SPDR = 0x00;
+    } else if (state == S_BURST) {
+        burst_idx++;
+        if (burst_idx < BURST_SIZE) {
+            SPDR = burst[burst_idx];
+        } else {
+            state = S_IDLE;
+            SPDR = 0x00;
+        }
+    }
+}
+
 ISR(PCINT0_vect) {
-    // CS changed state. For CS falling edge, the SPI hardware
-    // automatically shifts out the SPDR value pre-loaded by the
-    // previous SPIF handler — no action needed here.
+    // CS changed state — not needed with interrupt-driven SPI.
 }
 
 void setup() {
@@ -79,7 +117,7 @@ void setup() {
     digitalWrite(MOT_PIN, HIGH);
 
     pinMode(MISO, OUTPUT);
-    SPCR = _BV(SPE) | _BV(CPOL) | _BV(CPHA);  // SPI slave, mode 3
+    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);  // SPI slave, mode 3, interrupt
     SPDR = 0x00;
 
     PCICR  |= _BV(PCIE0);
@@ -99,7 +137,7 @@ void setup() {
 
     state = S_IDLE;
 
-    Serial.begin(9600);
+    Serial.begin(115200);
     Serial.println("--- PMW3610 emulator Exp05b ---");
     Serial.println("Rectangle speed test (100 Hz MOT)");
 }
@@ -112,49 +150,7 @@ void loop() {
     static uint8_t       last_spi_cnt  = 0;
     static unsigned long last_spi_print = 0;
 
-    // ── SPI byte handling (poll SPIF) ──
-    {
-        uint8_t spsr_val = SPSR;
-        if (spsr_val & _BV(SPIF)) {
-            uint8_t received = SPDR;  // SPIF cleared (SPSR read above, now SPDR)
-            spi_byte_count++;
-
-            if (state == S_IDLE) {
-                last_addr = received & 0x7F;
-                write_pending = received & 0x80;
-
-                if (write_pending) {
-                    // Write: address received, expect data byte (same CS assertion)
-                    state = S_ADDR_RCVD;
-                    SPDR = 0x00;
-                } else if (last_addr == REG_BURST) {
-                    // Burst read start
-                    state = S_BURST;
-                    burst_idx = 0;
-                    SPDR = burst[0];
-                } else {
-                    // Single register read
-                    state = S_ADDR_RCVD;
-                    SPDR = regs[last_addr];
-                }
-            } else if (state == S_ADDR_RCVD) {
-                if (write_pending) {
-                    regs[last_addr] = received;
-                    write_pending = 0;
-                }
-                state = S_IDLE;
-                SPDR = 0x00;
-            } else if (state == S_BURST) {
-                burst_idx++;
-                if (burst_idx < BURST_SIZE) {
-                    SPDR = burst[burst_idx];
-                } else {
-                    state = S_IDLE;
-                    SPDR = 0x00;
-                }
-            }
-        }
-    }
+    // ── SPI handled by ISR (SPI_STC_vect) — no polling needed
 
     // ── MOT pin pulse (triggers ZMK burst read) ──
     if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
