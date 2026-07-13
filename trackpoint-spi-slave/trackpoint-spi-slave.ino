@@ -35,6 +35,7 @@ static unsigned long ps2_last_pkt_ms = 0;
 
 static void update_from_ps2(int8_t x, int8_t y) {
     x = -x;  // reverse X axis — TrackPoint direction vs screen
+    x /= 4; y /= 4;  // scale down sensitivity for precise cursor control
     uint16_t x_12 = (x >= 0) ? (uint16_t)x : (uint16_t)(4096 + x);
     uint16_t y_12 = (y >= 0) ? (uint16_t)y : (uint16_t)(4096 + y);
 
@@ -158,6 +159,12 @@ void loop() {
         last_mot = millis();
     } else if (pulsed && (micros() - last_pulse_us >= PULSE_US)) {
         digitalWrite(MOT_PIN, HIGH);
+        cli();
+        burst[0] = 0x00;
+        burst[1] = 0x00;
+        burst[2] = 0x00;
+        burst[3] = 0x00;
+        sei();
         pulsed = false;
     }
 
