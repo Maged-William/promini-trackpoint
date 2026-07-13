@@ -40,4 +40,15 @@ jobs:
           name: pro-mini-serial-reader
           path: build-serial/
 
+      - name: Compile Diagnostic Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-diag trackpoint-diag/
+          rm -f build-diag/*.elf build-diag/*.bin build-diag/*.with_bootloader.*
+
+      - name: Upload Diagnostic Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-diag
+          path: build-diag/
+
 
