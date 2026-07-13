@@ -1,4 +1,5 @@
-// PMW3610 SPI Slave Emulator — Exp07
+// PMW3610 SPI Slave Emulator — Exp08
+// Power-curve smoothing: activity ramp replaces flat /4 scaling.
 // Real TrackPoint PS/2 data via SPI pipeline.
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
 // 100 Hz MOT (10ms period) for smooth cursor movement.
@@ -31,13 +32,30 @@ static uint8_t burst_idx;
 static volatile uint8_t spi_byte_count;
 static uint8_t regs[128];
 
-static unsigned long ps2_last_pkt_ms = 0;
+static unsigned long  ps2_last_pkt_ms = 0;
+static uint8_t        ramp             = 0;   // activity ramp 0..20 (Exp08)
 
 static void update_from_ps2(int8_t x, int8_t y) {
     x = -x;  // reverse X axis — TrackPoint direction vs screen
-    x /= 4; y /= 4;  // scale down sensitivity for precise cursor control
-    uint16_t x_12 = (x >= 0) ? (uint16_t)x : (uint16_t)(4096 + x);
-    uint16_t y_12 = (y >= 0) ? (uint16_t)y : (uint16_t)(4096 + y);
+
+    uint8_t mag = abs(x) + abs(y);
+    if (mag > 0) {
+        ramp += 2;
+        if (ramp > 20) ramp = 20;
+    }
+
+    // Power curve: output = input * ramp / 20
+    // At ramp=0: zero output, at ramp=20: full raw value
+    int16_t out_x = ((int16_t)x * ramp) / 20;
+    int16_t out_y = ((int16_t)y * ramp) / 20;
+
+    if (out_x > 127) out_x = 127;
+    if (out_x < -128) out_x = -128;
+    if (out_y > 127) out_y = 127;
+    if (out_y < -128) out_y = -128;
+
+    uint16_t x_12 = (out_x >= 0) ? (uint16_t)out_x : (uint16_t)(4096 + out_x);
+    uint16_t y_12 = (out_y >= 0) ? (uint16_t)out_y : (uint16_t)(4096 + out_y);
 
     cli();
     burst[0] = 0x01;
@@ -138,6 +156,8 @@ void loop() {
     uint8_t buttons;
     if (ps2.readPacket(x, y, buttons)) {
         update_from_ps2(x, y);
+    } else {
+        ramp = 0;  // instant decay — every touch starts from slow (Exp08)
     }
 
     // Clear stale motion if no PS/2 data for 500ms
