@@ -45,14 +45,10 @@ static void update_from_ps2(int8_t x, int8_t y) {
     }
 
     // Power curve: output = x * ramp / 80
-    // At ramp=0: output clamped to ±1px — no dead zone, instant min feedback
+    // At ramp=0: zero output (~35ms quiet zone before cursor reacts)
     // At ramp=20: output = x/4 — matches original Exp07 sensitivity
     int16_t out_x = ((int16_t)x * ramp) / 80;
     int16_t out_y = ((int16_t)y * ramp) / 80;
-
-    // Guarantee at least ±1px on any motion — no dead zone
-    if (out_x == 0 && x != 0) out_x = (x > 0) ? 1 : -1;
-    if (out_y == 0 && y != 0) out_y = (y > 0) ? 1 : -1;
 
     uint16_t x_12 = (out_x >= 0) ? (uint16_t)out_x : (uint16_t)(4096 + out_x);
     uint16_t y_12 = (out_y >= 0) ? (uint16_t)out_y : (uint16_t)(4096 + out_y);
