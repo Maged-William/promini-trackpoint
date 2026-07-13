@@ -1,17 +1,15 @@
-// PMW3610 SPI Slave Emulator — Exp04
-// Per-byte SPI transactions with CS deassertion between each byte.
-// The nRF52 sends each byte as a separate transaction (CS↓, 1 byte, CS↑).
-// CS deassertion gives the AVR time to read SPDR and write the next response,
-// eliminating the single-buffered SPDR overwrite race (Exp03 root cause).
+// PMW3610 SPI Slave Emulator — Exp05
+// Rectangle speed test with 4 segments at different velocities.
+// Per-byte SPI transactions with CS deassertion between each byte (Exp04 proven).
 //
-// Writes remain as 2-byte continuous transactions — the 8µs window (at 1MHz)
-// between bytes is enough for the SPIF polling loop to catch the address byte
-// before the data byte overwrites SPDR.
+// MOT period reduced to 50ms (20 Hz) so the cursor updates smoothly enough
+// to evaluate whether fast/slow movement is choppy or glitchy.
 //
-// State machine:
-//   S_IDLE       → address byte (first byte after CS↓)
-//   S_ADDR_RCVD  → single register data (read or write)
-//   S_BURST      → burst read data (sequential register values)
+// Rectangle:
+//   A→B: Fast right   (+10,  0) × 20 steps  ≈ 1s  @ 50ms
+//   B→C: Slow down    (  0, +1) × 100 steps ≈ 5s
+//   C→D: Normal left  ( -5,  0) × 40 steps  ≈ 2s
+//   D→A: Extra fast up(  0,-10) × 10 steps  ≈ 0.5s
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -20,26 +18,15 @@
 
 #define MOT_PIN      2
 #define PULSE_US     100
-#define PERIOD_MS    500
+#define PERIOD_MS    50
 
-// Circle pattern: 16 steps of {X_L, Y_L, XY_H} forming a smooth circle
-static const uint8_t circle[16][3] PROGMEM = {
-    {0x03, 0x00, 0x00},  //  0: X=3,  Y=0
-    {0x03, 0x01, 0x00},  //  1: X=3,  Y=1
-    {0x02, 0x02, 0x00},  //  2: X=2,  Y=2
-    {0x01, 0x03, 0x00},  //  3: X=1,  Y=3
-    {0x00, 0x03, 0x00},  //  4: X=0,  Y=3
-    {0xFF, 0x03, 0xF0},  //  5: X=-1, Y=3
-    {0xFE, 0x02, 0xF0},  //  6: X=-2, Y=2
-    {0xFD, 0x01, 0xF0},  //  7: X=-3, Y=1
-    {0xFD, 0x00, 0xF0},  //  8: X=-3, Y=0
-    {0xFD, 0xFF, 0xFF},  //  9: X=-3, Y=-1
-    {0xFE, 0xFE, 0xFF},  // 10: X=-2, Y=-2
-    {0xFF, 0xFD, 0xFF},  // 11: X=-1, Y=-3
-    {0x00, 0xFD, 0x0F},  // 12: X=0,  Y=-3
-    {0x01, 0xFD, 0x0F},  // 13: X=1,  Y=-3
-    {0x02, 0xFE, 0x0F},  // 14: X=2,  Y=-2
-    {0x03, 0xFF, 0x0F},  // 15: X=3,  Y=-1
+// Rectangle segment data: {dx, dy, steps}
+// dx/dy are signed 8-bit, converted to 12-bit two's complement at runtime
+static const int8_t rect_data[4][3] PROGMEM = {
+    { 10,  0, 20  },   // A→B: Fast right   (+10,  0) × 20
+    {  0,  1, 100 },   // B→C: Slow down    (  0, +1) × 100
+    { -5,  0, 40  },   // C→D: Normal left  ( -5,  0) × 40
+    {  0, -10, 10  },   // D→A: Extra fast up(  0,-10) × 10
 };
 
 #define BURST_SIZE     7
@@ -55,17 +42,30 @@ static uint8_t burst_idx;
 static volatile uint8_t spi_byte_count;
 static uint8_t regs[128];
 
-static void update_circle_step(uint8_t step) {
-    uint8_t i = step & 0x0F;
-    uint8_t xl  = pgm_read_byte(&circle[i][0]);
-    uint8_t yl  = pgm_read_byte(&circle[i][1]);
-    uint8_t xyh = pgm_read_byte(&circle[i][2]);
+static uint8_t segment = 0;
+static uint8_t step_in_seg = 0;
+
+static void update_rect_step(void) {
+    int8_t dx = pgm_read_byte(&rect_data[segment][0]);
+    int8_t dy = pgm_read_byte(&rect_data[segment][1]);
+
+    // Convert signed 8-bit to 12-bit two's complement
+    uint16_t dx_12 = (dx >= 0) ? (uint16_t)dx : (uint16_t)(4096 + dx);
+    uint16_t dy_12 = (dy >= 0) ? (uint16_t)dy : (uint16_t)(4096 + dy);
 
     cli();
-    burst[1] = xl;
-    burst[2] = yl;
-    burst[3] = xyh;
+    burst[1] = (uint8_t)(dx_12 & 0xFF);        // X_L
+    burst[2] = (uint8_t)(dy_12 & 0xFF);        // Y_L
+    burst[3] = ((uint8_t)(dx_12 >> 4) & 0xF0)
+             | ((uint8_t)(dy_12 >> 8) & 0x0F); // XY_H
     sei();
+
+    step_in_seg++;
+    uint8_t steps = pgm_read_byte(&rect_data[segment][2]);
+    if (step_in_seg >= steps) {
+        segment = (segment + 1) & 3;
+        step_in_seg = 0;
+    }
 }
 
 ISR(PCINT0_vect) {
@@ -85,10 +85,10 @@ void setup() {
     PCICR  |= _BV(PCIE0);
     PCMSK0 |= _BV(PCINT2);  // PB2 = SS/D10 (CS)
 
-    // Initialize burst with circle step 0 values
+    // Initialize burst with segment 0 values (A→B: +10, 0)
     burst[0] = 0x01;  // MOTION — motion detected
-    burst[1] = 0x03;  // DELTA_X_L
-    burst[2] = 0x00;  // DELTA_Y_L
+    burst[1] = 0x0A;  // DELTA_X_L = 10
+    burst[2] = 0x00;  // DELTA_Y_L = 0
     burst[3] = 0x00;  // DELTA_XY_H
     burst[4] = 0x00;  // SQUAL
     burst[5] = 0x00;  // SHUTTER_H
@@ -100,15 +100,15 @@ void setup() {
     state = S_IDLE;
 
     Serial.begin(9600);
-    Serial.println("--- PMW3610 emulator Exp04 ---");
-    Serial.println("Per-byte transactions + CS deassertion");
+    Serial.println("--- PMW3610 emulator Exp05 ---");
+    Serial.println("Rectangle speed test (20 Hz MOT)");
 }
 
 void loop() {
     static unsigned long last_step     = 0;
     static bool          pulsed        = false;
     static unsigned long last_pulse_us = 0;
-    static uint8_t       step          = 0;
+
     static uint8_t       last_spi_cnt  = 0;
     static unsigned long last_spi_print = 0;
 
@@ -158,7 +158,7 @@ void loop() {
 
     // ── MOT pin pulse (triggers ZMK burst read) ──
     if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
-        update_circle_step(step++);
+        update_rect_step();
         digitalWrite(MOT_PIN, LOW);
         pulsed = true;
         last_pulse_us = micros();
