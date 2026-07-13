@@ -1,15 +1,15 @@
-// PMW3610 SPI Slave Emulator — Exp05
-// Rectangle speed test with 4 segments at different velocities.
+// PMW3610 SPI Slave Emulator — Exp05b
+// Rectangle speed test — 100 Hz MOT for smooth movement.
 // Per-byte SPI transactions with CS deassertion between each byte (Exp04 proven).
 //
-// MOT period reduced to 50ms (20 Hz) so the cursor updates smoothly enough
-// to evaluate whether fast/slow movement is choppy or glitchy.
+// MOT period 10ms (100 Hz) — each cursor step is smaller at the same screen
+// speed, eliminating the "20 fps" choppiness of Exp05.
 //
-// Rectangle:
-//   A→B: Fast right   (+10,  0) × 20 steps  ≈ 1s  @ 50ms
-//   B→C: Slow down    (  0, +1) × 100 steps ≈ 5s
-//   C→D: Normal left  ( -5,  0) × 40 steps  ≈ 2s
-//   D→A: Extra fast up(  0,-10) × 10 steps  ≈ 0.5s
+// Rectangle (200×200 px):
+//   A→B: Fast right     (+2,  0) × 100 steps  ≈ 1.0s  @ 200 px/s
+//   B→C: Slow down      ( 0, +1) × 200 steps  ≈ 2.0s  @ 100 px/s
+//   C→D: Extrafast left (-4,  0) ×  50 steps  ≈ 0.5s  @ 400 px/s
+//   D→A: Normal up      ( 0, -2) × 100 steps  ≈ 1.0s  @ 200 px/s
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -18,15 +18,15 @@
 
 #define MOT_PIN      2
 #define PULSE_US     100
-#define PERIOD_MS    50
+#define PERIOD_MS    10
 
 // Rectangle segment data: {dx, dy, steps}
 // dx/dy are signed 8-bit, converted to 12-bit two's complement at runtime
 static const int8_t rect_data[4][3] PROGMEM = {
-    { 10,  0, 20  },   // A→B: Fast right   (+10,  0) × 20
-    {  0,  1, 100 },   // B→C: Slow down    (  0, +1) × 100
-    { -5,  0, 40  },   // C→D: Normal left  ( -5,  0) × 40
-    {  0, -10, 10  },   // D→A: Extra fast up(  0,-10) × 10
+    {  2,  0, 100 },   // A→B: Fast right     (+2,  0) × 100
+    {  0,  1, 200 },   // B→C: Slow down      ( 0, +1) × 200
+    { -4,  0, 50  },   // C→D: Extrafast left (-4,  0) ×  50
+    {  0, -2, 100 },   // D→A: Normal up      ( 0, -2) × 100
 };
 
 #define BURST_SIZE     7
@@ -85,9 +85,9 @@ void setup() {
     PCICR  |= _BV(PCIE0);
     PCMSK0 |= _BV(PCINT2);  // PB2 = SS/D10 (CS)
 
-    // Initialize burst with segment 0 values (A→B: +10, 0)
+    // Initialize burst with segment 0 values (A→B: +2, 0)
     burst[0] = 0x01;  // MOTION — motion detected
-    burst[1] = 0x0A;  // DELTA_X_L = 10
+    burst[1] = 0x02;  // DELTA_X_L = 2
     burst[2] = 0x00;  // DELTA_Y_L = 0
     burst[3] = 0x00;  // DELTA_XY_H
     burst[4] = 0x00;  // SQUAL
@@ -100,8 +100,8 @@ void setup() {
     state = S_IDLE;
 
     Serial.begin(9600);
-    Serial.println("--- PMW3610 emulator Exp05 ---");
-    Serial.println("Rectangle speed test (20 Hz MOT)");
+    Serial.println("--- PMW3610 emulator Exp05b ---");
+    Serial.println("Rectangle speed test (100 Hz MOT)");
 }
 
 void loop() {
