@@ -1,32 +1,22 @@
-// PMW3610 SPI Slave Emulator — Exp05
-// Rectangle speed test — final.
+// PMW3610 SPI Slave Emulator — Exp07
+// Real TrackPoint PS/2 data via SPI pipeline.
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
 // 100 Hz MOT (10ms period) for smooth cursor movement.
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
-//
-// Rectangle (200×200 px, ~4.5s loop):
-//   A→B: Fast right     (+2,  0) × 100 steps  200 px/s
-//   B→C: Slow down      ( 0, +1) × 200 steps  100 px/s
-//   C→D: Extrafast left (-4,  0) ×  50 steps  400 px/s
-//   D→A: Normal up      ( 0, -2) × 100 steps  200 px/s
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <avr/pgmspace.h>
 #include <Arduino.h>
+#include <PS2Trackpoint.h>
 
 #define MOT_PIN      2
 #define PULSE_US     100
 #define PERIOD_MS    10
 
-// Rectangle segment data: {dx, dy, steps}
-// dx/dy are signed 8-bit, converted to 12-bit two's complement at runtime
-static const int8_t rect_data[4][3] PROGMEM = {
-    {  2,  0, 100 },   // A→B: Fast right     (+2,  0) × 100
-    {  0,  1, 200 },   // B→C: Slow down      ( 0, +1) × 200
-    { -4,  0, 50  },   // C→D: Extrafast left (-4,  0) ×  50
-    {  0, -2, 100 },   // D→A: Normal up      ( 0, -2) × 100
-};
+#define PS2_CLK      7
+#define PS2_DAT      3
+
+PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
 #define BURST_SIZE     7
 #define REG_BURST      0x12
@@ -41,30 +31,24 @@ static uint8_t burst_idx;
 static volatile uint8_t spi_byte_count;
 static uint8_t regs[128];
 
-static uint8_t segment = 0;
-static uint8_t step_in_seg = 0;
+static unsigned long ps2_last_pkt_ms = 0;
 
-static void update_rect_step(void) {
-    int8_t dx = pgm_read_byte(&rect_data[segment][0]);
-    int8_t dy = pgm_read_byte(&rect_data[segment][1]);
-
-    // Convert signed 8-bit to 12-bit two's complement
-    uint16_t dx_12 = (dx >= 0) ? (uint16_t)dx : (uint16_t)(4096 + dx);
-    uint16_t dy_12 = (dy >= 0) ? (uint16_t)dy : (uint16_t)(4096 + dy);
+static void update_from_ps2(int8_t x, int8_t y) {
+    uint16_t x_12 = (x >= 0) ? (uint16_t)x : (uint16_t)(4096 + x);
+    uint16_t y_12 = (y >= 0) ? (uint16_t)y : (uint16_t)(4096 + y);
 
     cli();
-    burst[1] = (uint8_t)(dx_12 & 0xFF);        // X_L
-    burst[2] = (uint8_t)(dy_12 & 0xFF);        // Y_L
-    burst[3] = ((uint8_t)(dx_12 >> 4) & 0xF0)
-             | ((uint8_t)(dy_12 >> 8) & 0x0F); // XY_H
+    burst[0] = 0x01;
+    burst[1] = (uint8_t)(x_12 & 0xFF);
+    burst[2] = (uint8_t)(y_12 & 0xFF);
+    burst[3] = ((uint8_t)(x_12 >> 4) & 0xF0)
+             | ((uint8_t)(y_12 >> 8) & 0x0F);
+    burst[4] = 0x00;
+    burst[5] = 0x00;
+    burst[6] = 0x00;
     sei();
 
-    step_in_seg++;
-    uint8_t steps = pgm_read_byte(&rect_data[segment][2]);
-    if (step_in_seg >= steps) {
-        segment = (segment + 1) & 3;
-        step_in_seg = 0;
-    }
+    ps2_last_pkt_ms = millis();
 }
 
 // ── SPI Interrupt ──
@@ -116,48 +100,61 @@ void setup() {
     digitalWrite(MOT_PIN, HIGH);
 
     pinMode(MISO, OUTPUT);
-    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);  // SPI slave, mode 3, interrupt
+    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
     SPDR = 0x00;
 
     PCICR  |= _BV(PCIE0);
-    PCMSK0 |= _BV(PCINT2);  // PB2 = SS/D10 (CS)
+    PCMSK0 |= _BV(PCINT2);
 
-    // Initialize burst with segment 0 values (A→B: +2, 0)
-    burst[0] = 0x01;  // MOTION — motion detected
-    burst[1] = 0x02;  // DELTA_X_L = 2
-    burst[2] = 0x00;  // DELTA_Y_L = 0
-    burst[3] = 0x00;  // DELTA_XY_H
-    burst[4] = 0x00;  // SQUAL
-    burst[5] = 0x00;  // SHUTTER_H
-    burst[6] = 0x00;  // SHUTTER_L
-
-    // Register file (reads use these for single-register access)
-    // All zeros by default (global), which is fine.
+    burst[0] = 0x00;
+    burst[1] = 0x00;
+    burst[2] = 0x00;
+    burst[3] = 0x00;
+    burst[4] = 0x00;
+    burst[5] = 0x00;
+    burst[6] = 0x00;
 
     state = S_IDLE;
 
+    ps2.begin();
+
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp05b ---");
-    Serial.println("Rectangle speed test (100 Hz MOT)");
+    Serial.println("--- PMW3610 emulator Exp07 ---");
+    Serial.println("TrackPoint PS/2 → SPI pipeline");
 }
 
 void loop() {
-    static unsigned long last_step     = 0;
+    static unsigned long last_mot      = 0;
     static bool          pulsed        = false;
     static unsigned long last_pulse_us = 0;
 
     static uint8_t       last_spi_cnt  = 0;
     static unsigned long last_spi_print = 0;
 
-    // ── SPI handled by ISR (SPI_STC_vect) — no polling needed
+    // ── Read TrackPoint PS/2 packet ──
+    int8_t x, y;
+    uint8_t buttons;
+    if (ps2.readPacket(x, y, buttons)) {
+        update_from_ps2(x, y);
+    }
+
+    // Clear stale motion if no PS/2 data for 500ms
+    if (ps2_last_pkt_ms && (millis() - ps2_last_pkt_ms > 500)) {
+        cli();
+        burst[0] = 0x00;
+        burst[1] = 0x00;
+        burst[2] = 0x00;
+        burst[3] = 0x00;
+        sei();
+        ps2_last_pkt_ms = 0;
+    }
 
     // ── MOT pin pulse (triggers ZMK burst read) ──
-    if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
-        update_rect_step();
+    if (!pulsed && (millis() - last_mot >= PERIOD_MS)) {
         digitalWrite(MOT_PIN, LOW);
         pulsed = true;
         last_pulse_us = micros();
-        last_step = millis();
+        last_mot = millis();
     } else if (pulsed && (micros() - last_pulse_us >= PULSE_US)) {
         digitalWrite(MOT_PIN, HIGH);
         pulsed = false;
