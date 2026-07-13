@@ -1,15 +1,14 @@
-// PMW3610 SPI Slave Emulator — Exp05b
-// Rectangle speed test — 100 Hz MOT for smooth movement.
-// Per-byte SPI transactions with CS deassertion between each byte (Exp04 proven).
+// PMW3610 SPI Slave Emulator — Exp05
+// Rectangle speed test — final.
+// Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
+// 100 Hz MOT (10ms period) for smooth cursor movement.
+// Per-byte SPI transactions with CS deassertion (Exp04 proven).
 //
-// MOT period 10ms (100 Hz) — each cursor step is smaller at the same screen
-// speed, eliminating the "20 fps" choppiness of Exp05.
-//
-// Rectangle (200×200 px):
-//   A→B: Fast right     (+2,  0) × 100 steps  ≈ 1.0s  @ 200 px/s
-//   B→C: Slow down      ( 0, +1) × 200 steps  ≈ 2.0s  @ 100 px/s
-//   C→D: Extrafast left (-4,  0) ×  50 steps  ≈ 0.5s  @ 400 px/s
-//   D→A: Normal up      ( 0, -2) × 100 steps  ≈ 1.0s  @ 200 px/s
+// Rectangle (200×200 px, ~4.5s loop):
+//   A→B: Fast right     (+2,  0) × 100 steps  200 px/s
+//   B→C: Slow down      ( 0, +1) × 200 steps  100 px/s
+//   C→D: Extrafast left (-4,  0) ×  50 steps  400 px/s
+//   D→A: Normal up      ( 0, -2) × 100 steps  200 px/s
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
