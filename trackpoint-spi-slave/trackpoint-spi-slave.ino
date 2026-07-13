@@ -40,19 +40,15 @@ static void update_from_ps2(int8_t x, int8_t y) {
 
     uint8_t mag = abs(x) + abs(y);
     if (mag > 0) {
-        ramp += 2;
+        ramp += 4;
         if (ramp > 20) ramp = 20;
     }
 
-    // Power curve: output = input * ramp / 20
-    // At ramp=0: zero output, at ramp=20: full raw value
-    int16_t out_x = ((int16_t)x * ramp) / 20;
-    int16_t out_y = ((int16_t)y * ramp) / 20;
-
-    if (out_x > 127) out_x = 127;
-    if (out_x < -128) out_x = -128;
-    if (out_y > 127) out_y = 127;
-    if (out_y < -128) out_y = -128;
+    // Power curve: output = x * ramp / 80
+    // At ramp=0: zero output — ~25ms dead zone per touch
+    // At ramp=20: output = x/4 — matches original Exp07 sensitivity
+    int16_t out_x = ((int16_t)x * ramp) / 80;
+    int16_t out_y = ((int16_t)y * ramp) / 80;
 
     uint16_t x_12 = (out_x >= 0) ? (uint16_t)out_x : (uint16_t)(4096 + out_x);
     uint16_t y_12 = (out_y >= 0) ? (uint16_t)out_y : (uint16_t)(4096 + out_y);
