@@ -47,10 +47,7 @@ void setup() {
 
     Serial.begin(38400);
 
-    Serial.println();
-    Serial.println(F("=== Exp09 Phase 1: Manual Power Control ==="));
-    Serial.println(F("Commands: on / off / status"));
-    Serial.println();
+    Serial.println(F("Exp09: on/off/s/status"));
 
     power_on();
     ps2.begin();
@@ -68,28 +65,18 @@ void loop() {
     }
 
     // ── Serial commands ──
-    while (Serial.available()) {
-        char c = Serial.read();
-        if (c == '\n' || c == '\r') continue;
-
-        String cmd;
-        cmd += c;
-        while (Serial.available()) {
-            char n = Serial.peek();
-            if (n == '\n' || n == '\r') break;
-            cmd += (char)Serial.read();
-        }
-
-        if (cmd == "on") {
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        if (cmd.length() == 0) {
+            // ignore empty lines
+        } else if (cmd == "on") {
             power_on();
         } else if (cmd == "off") {
             power_off();
-        } else if (cmd == "status") {
+        } else if (cmd == "s" || cmd == "status") {
             print_status();
-        } else {
-            Serial.print(F("[CMD] unknown: "));
-            Serial.println(cmd);
-        }
+        } // unknown commands silently ignored
     }
 
     // ── Periodic status ──
