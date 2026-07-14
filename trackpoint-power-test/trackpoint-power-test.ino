@@ -7,8 +7,8 @@
 #include <PS2Trackpoint.h>
 
 #define POWER_PIN    4
-#define PS2_CLK      7
-#define PS2_DAT      3
+#define PS2_CLK      3
+#define PS2_DAT      2
 #define TOUCH_PIN    19
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
