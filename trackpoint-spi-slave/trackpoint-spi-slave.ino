@@ -4,18 +4,21 @@
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
 // 100 Hz MOT (10ms period) for smooth cursor movement.
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
+// Wiring: MOT=D14  PS2_CLK=D3  PS2_DAT=D2  NPN=D4  TOUCH=D19 (A5)
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <Arduino.h>
 #include <PS2Trackpoint.h>
 
-#define MOT_PIN      2
+#define MOT_PIN      14
 #define PULSE_US     100
 #define PERIOD_MS    10
 
-#define PS2_CLK      7
-#define PS2_DAT      3
+#define PS2_CLK      3
+#define PS2_DAT      2
+#define NPN_PIN      4
+#define TOUCH_PIN    19
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
@@ -115,6 +118,11 @@ void setup() {
     pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
 
+    pinMode(NPN_PIN, OUTPUT);
+    digitalWrite(NPN_PIN, HIGH);
+
+    pinMode(TOUCH_PIN, INPUT);
+
     pinMode(MISO, OUTPUT);
     SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
     SPDR = 0x00;
@@ -135,8 +143,8 @@ void setup() {
     ps2.begin();
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp07 ---");
-    Serial.println("TrackPoint PS/2 → SPI pipeline");
+    Serial.println("--- PMW3610 emulator Exp08 ---");
+    Serial.println("MOT=D14  PS/2 CLK=D3  DAT=D2  NPN=D4  TOUCH=D19");
 }
 
 void loop() {
