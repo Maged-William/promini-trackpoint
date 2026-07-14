@@ -1,12 +1,12 @@
 // Exp06: TrackPoint Serial Reader — final
 // Reads 3-byte motion packets via PS2Trackpoint library.
 // This IC streams on power-up (no reset/enableStreaming needed).
-// Wiring: D7=CLK, D3=DAT (per AGENTS.md)
+// Wiring: D3=CLK, D7=DAT (per AGENTS.md)
 
 #include <PS2Trackpoint.h>
 
-#define CLK_PIN  7
-#define DAT_PIN  3
+#define CLK_PIN  3
+#define DAT_PIN  7
 
 PS2Trackpoint ps2(CLK_PIN, DAT_PIN);
 

@@ -1,7 +1,7 @@
 #include <PS2Trackpoint.h>
 
-#define PS2_CLK 7
-#define PS2_DAT 3
+#define PS2_CLK 3
+#define PS2_DAT 7
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 

@@ -1,10 +1,11 @@
-// PMW3610 SPI Slave Emulator — Exp09
-// Deep sleep with TTP223 touch wakeup on D19.
-// AGENTS.md wiring: MOT=D14, PS2_CLK=D3, PS2_DAT=D2.
+// PMW3610 SPI Slave Emulator — Exp10
+// Deep sleep on PS/2 idle, TTP223 INT0 wakeup (D2).
+// AGENTS.md wiring: MOT=D14, PS2_CLK=D3, PS2_DAT=D7, NPN=D4, TTP223=D2.
 // Power-curve smoothing: activity ramp (Exp08).
 // Interrupt-driven SPI (SPI_STC_vect).
 // 100 Hz MOT. Per-byte SPI transactions.
-// LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF) when idle.
+// 2s idle → LowPower.powerDown(SLEEP_FOREVER). INT0 RISING wake.
+// SPI + serial stay enabled during sleep; TrackPoint stays powered.
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -13,12 +14,13 @@
 #include <LowPower.h>
 
 #define MOT_PIN      14
-#define TOUCH_PIN    19
+#define TOUCH_PIN    2
 #define PULSE_US     100
 #define PERIOD_MS    10
 
 #define PS2_CLK      3
-#define PS2_DAT      2
+#define PS2_DAT      7
+#define NPN_PIN      4
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
@@ -107,7 +109,7 @@ ISR(SPI_STC_vect) {
 ISR(PCINT0_vect) {
 }
 
-ISR(PCINT1_vect) {
+static void wakeUp() {
 }
 
 static void enter_sleep() {
@@ -115,29 +117,11 @@ static void enter_sleep() {
     Serial.flush();
     delay(10);
 
-    UCSR0B = 0;
-
-    SPCR &= ~_BV(SPE);
-
-    pinMode(MOT_PIN, INPUT_PULLUP);
-
-    cli();
-    PCMSK0 &= ~_BV(PCINT2);
-    PCMSK1 |= _BV(PCINT5);
-    PCICR  |= _BV(PCIE1);
-    sei();
-
-    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-
-    PCMSK1 &= ~_BV(PCINT5);
-
-    PCMSK0 |= _BV(PCINT2);
-
-    pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
 
-    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
-    SPDR = 0x00;
+    attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+    detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
 
     state = S_IDLE;
     burst_idx = 0;
@@ -150,13 +134,15 @@ static void enter_sleep() {
     ramp = 0;
     ps2_last_pkt_ms = 0;
 
-    Serial.begin(115200);
     Serial.println("Woke!");
 }
 
 void setup() {
     pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
+
+    pinMode(NPN_PIN, OUTPUT);
+    digitalWrite(NPN_PIN, HIGH);
 
     pinMode(TOUCH_PIN, INPUT);
 
@@ -175,8 +161,8 @@ void setup() {
     ps2.begin();
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp09 ---");
-    Serial.println("Deep sleep + TTP223 touch wakeup");
+    Serial.println("--- PMW3610 emulator Exp10 ---");
+    Serial.println("MOT=D14  PS2 CLK=D3  DAT=D7  NPN=D4  TTP223=D2");
 }
 
 void loop() {
@@ -190,30 +176,12 @@ void loop() {
     static unsigned long idle_start     = 0;
     static bool          boot_grace     = true;
 
-    uint8_t touched = digitalRead(TOUCH_PIN);
-
-    if (!touched) {
-        if (idle_start == 0) {
-            idle_start = millis();
-        } else {
-            unsigned long timeout = boot_grace ? 15000UL : 2000UL;
-            if (millis() - idle_start >= timeout) {
-                enter_sleep();
-                last_mot   = millis();
-                pulsed     = false;
-                idle_start = 0;
-                boot_grace = false;
-            }
-        }
-    } else {
-        idle_start = 0;
-        boot_grace = false;
-    }
-
     int8_t x, y;
     uint8_t buttons;
     if (ps2.readPacket(x, y, buttons)) {
         update_from_ps2(x, y);
+        idle_start = 0;
+        boot_grace = false;
     } else {
         ramp = 0;
     }
@@ -251,5 +219,20 @@ void loop() {
             Serial.println("SPI bytes: 0 (no activity)");
         }
         last_spi_print = millis();
+    }
+
+    if (boot_grace && millis() > 15000) {
+        boot_grace = false;
+        idle_start = millis();
+    }
+    if (!boot_grace) {
+        if (idle_start == 0) {
+            idle_start = millis();
+        } else if (millis() - idle_start >= 2000) {
+            enter_sleep();
+            last_mot   = millis();
+            pulsed     = false;
+            idle_start = 0;
+        }
     }
 }
