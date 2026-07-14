@@ -51,15 +51,5 @@ jobs:
           name: pro-mini-diag
           path: build-diag/
 
-      - name: Compile Power Test Sketch
-        run: |
-          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-power trackpoint-power-test/
-          rm -f build-power/*.elf build-power/*.bin build-power/*.with_bootloader.*
-
-      - name: Upload Power Test Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: pro-mini-power-test
-          path: build-power/
 
 
