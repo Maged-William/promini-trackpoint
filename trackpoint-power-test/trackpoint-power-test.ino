@@ -16,6 +16,8 @@ PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 static bool powered   = true;
 static unsigned long pkt_count  = 0;
 static unsigned long last_print = 0;
+static int8_t  last_x = 0, last_y = 0;
+static uint8_t last_buttons = 0;
 
 void power_on() {
     digitalWrite(POWER_PIN, HIGH);
@@ -61,6 +63,9 @@ void loop() {
         uint8_t buttons;
         if (ps2.readPacket(x, y, buttons)) {
             pkt_count++;
+            last_x = x;
+            last_y = y;
+            last_buttons = buttons;
         }
     }
 
@@ -79,9 +84,13 @@ void loop() {
         } // unknown commands silently ignored
     }
 
-    // ── Periodic status ──
-    if (millis() - last_print >= 2000) {
-        print_status();
+    // ── Periodic X/Y log ──
+    if (millis() - last_print >= 500) {
+        Serial.print(last_x);
+        Serial.print('\t');
+        Serial.print(last_y);
+        Serial.print('\t');
+        Serial.println(last_buttons);
         last_print = millis();
     }
 }
