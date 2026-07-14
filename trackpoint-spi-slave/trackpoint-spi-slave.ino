@@ -187,21 +187,27 @@ void loop() {
     static uint8_t       last_spi_cnt   = 0;
     static unsigned long last_spi_print = 0;
 
-    static unsigned long idle_start = 0;
+    static unsigned long idle_start     = 0;
+    static bool          boot_grace     = true;
 
     uint8_t touched = digitalRead(TOUCH_PIN);
 
     if (!touched) {
         if (idle_start == 0) {
             idle_start = millis();
-        } else if (millis() - idle_start >= 2000) {
-            enter_sleep();
-            last_mot   = millis();
-            pulsed     = false;
-            idle_start = 0;
+        } else {
+            unsigned long timeout = boot_grace ? 15000UL : 2000UL;
+            if (millis() - idle_start >= timeout) {
+                enter_sleep();
+                last_mot   = millis();
+                pulsed     = false;
+                idle_start = 0;
+                boot_grace = false;
+            }
         }
     } else {
         idle_start = 0;
+        boot_grace = false;
     }
 
     int8_t x, y;
