@@ -119,9 +119,16 @@ static void enter_sleep() {
 
     digitalWrite(MOT_PIN, HIGH);
 
+    SPCR &= ~_BV(SPE);
+    pinMode(13, OUTPUT);
+    digitalWrite(13, LOW);
+
     attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
+
+    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
+    SPDR = 0x00;
 
     state = S_IDLE;
     burst_idx = 0;
