@@ -21,15 +21,20 @@ static uint8_t last_buttons = 0;
 
 void power_on() {
     digitalWrite(POWER_PIN, HIGH);
+    delay(10);
+    ps2.begin();
+    delay(100);
     powered = true;
     Serial.println(F("[POWER] ON"));
-    delay(100);  // let TrackPoint stabilize
 }
 
 void power_off() {
-    digitalWrite(POWER_PIN, LOW);
     powered = false;
+    digitalWrite(POWER_PIN, LOW);
+    pinMode(PS2_CLK, OUTPUT); digitalWrite(PS2_CLK, LOW);
+    pinMode(PS2_DAT, OUTPUT); digitalWrite(PS2_DAT, LOW);
     pkt_count = 0;
+    last_x = 0; last_y = 0; last_buttons = 0;
     Serial.println(F("[POWER] OFF"));
 }
 
