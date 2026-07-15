@@ -11,6 +11,9 @@ unsigned long stray_count = 0;
 unsigned long last_pkt_ms = 0;
 
 void setup() {
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+
   ps2.begin();
 
   Serial.begin(38400);
