@@ -235,12 +235,7 @@ void loop() {
             last_err = err;
             last_err_print = millis();
         }
-    }
-        cli();
-        burst[0] = 0x00; burst[1] = 0x00; burst[2] = 0x00; burst[3] = 0x00;
-        sei();
-        ps2_last_pkt_ms = 0;
-    }
+        }
 
     if (!pulsed && (millis() - last_mot >= PERIOD_MS)) {
         digitalWrite(MOT_PIN, LOW);
