@@ -66,14 +66,6 @@ static void update_from_ps2(int8_t x, int8_t y) {
     burst[6] = 0x00;
     sei();
 
-    Serial.print("Burst: ");
-    for (uint8_t i = 0; i < BURST_SIZE; i++) {
-        if (burst[i] < 0x10) Serial.print("0");
-        Serial.print(burst[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
     ps2_last_pkt_ms = millis();
 }
 
@@ -166,7 +158,6 @@ static void enter_sleep() {
     burst[0] = 0x00; burst[1] = 0x00; burst[2] = 0x00; burst[3] = 0x00;
     burst[4] = 0x00; burst[5] = 0x00; burst[6] = 0x00;
     sei();
-    Serial.println("Burst cleared (idle)");
 
     ramp = 0;
     ps2_last_pkt_ms = 0;
@@ -227,7 +218,6 @@ void loop() {
     uint8_t buttons;
     if (ps2.readPacket(x, y, buttons)) {
         update_from_ps2(x, y);
-        Serial.print("PS2: "); Serial.print(x); Serial.print(","); Serial.println(y);
         idle_start = 0;
         boot_grace = false;
     } else {
