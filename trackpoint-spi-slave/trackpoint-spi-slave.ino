@@ -1,11 +1,10 @@
-// PMW3610 SPI Slave Emulator — Exp10
-// Deep sleep on PS/2 idle, TTP223 INT0 wakeup (D2).
-// AGENTS.md wiring: MOT=D14, PS2_CLK=D3, PS2_DAT=D7, NPN=D4, TTP223=D2.
+// PMW3610 SPI Slave Emulator — Exp14
+// Deep sleep with dual-rail power cut + PS/2 pin float.
+// D4 = NPN (GND switch), D6 = AO3401 P-MOSFET (VCC switch).
+// D3/D7 floated (INPUT, no pull-up) during sleep to kill parasitic power.
+// TTP223 INT0 wakeup (D2). SPI + PS/2 re-initialized on wake.
 // Power-curve smoothing: activity ramp (Exp08).
-// Interrupt-driven SPI (SPI_STC_vect).
-// 100 Hz MOT. Per-byte SPI transactions.
-// 2s idle → LowPower.powerDown(SLEEP_FOREVER). INT0 RISING wake.
-// SPI + serial stay enabled during sleep; TrackPoint stays powered.
+// Interrupt-driven SPI (SPI_STC_vect). 100 Hz MOT. Per-byte SPI transactions.
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -21,6 +20,7 @@
 #define PS2_CLK      3
 #define PS2_DAT      7
 #define NPN_PIN      4
+#define VCC_PIN      6
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
@@ -119,6 +119,15 @@ static void enter_sleep() {
 
     digitalWrite(MOT_PIN, HIGH);
 
+    // Cut both power rails
+    digitalWrite(NPN_PIN, LOW);   // NPN OFF — GND floating
+    digitalWrite(VCC_PIN, HIGH);  // P-MOSFET OFF — VCC disconnected
+
+    // Float PS/2 pins (no pull-ups) to kill parasitic power
+    pinMode(PS2_CLK, INPUT);
+    pinMode(PS2_DAT, INPUT);
+
+    // Kill SPI and D13 LED
     SPCR &= ~_BV(SPE);
     pinMode(13, OUTPUT);
     digitalWrite(13, LOW);
@@ -127,6 +136,18 @@ static void enter_sleep() {
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
 
+    // --- WAKE ---
+
+    // Restore power rails
+    digitalWrite(VCC_PIN, LOW);   // P-MOSFET ON — VCC connected
+    digitalWrite(NPN_PIN, HIGH);  // NPN ON — GND connected
+    delay(5);  // let power stabilize
+
+    // Re-init PS/2 pins (INPUT_PULLUP) and let TrackPoint power on
+    ps2.begin();
+    delay(50);
+
+    // Restore SPI
     SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
     SPDR = 0x00;
 
@@ -151,6 +172,9 @@ void setup() {
     pinMode(NPN_PIN, OUTPUT);
     digitalWrite(NPN_PIN, HIGH);
 
+    pinMode(VCC_PIN, OUTPUT);
+    digitalWrite(VCC_PIN, LOW);  // LOW = P-MOSFET ON = VCC connected
+
     pinMode(TOUCH_PIN, INPUT);
 
     pinMode(MISO, OUTPUT);
@@ -168,8 +192,8 @@ void setup() {
     ps2.begin();
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp10 ---");
-    Serial.println("MOT=D14  PS2 CLK=D3  DAT=D7  NPN=D4  TTP223=D2");
+    Serial.println("--- PMW3610 emulator Exp14 ---");
+    Serial.println("MOT=D14  PS2 CLK=D3  DAT=D7  NPN=D4  VCC=D6  TTP223=D2");
 }
 
 void loop() {
