@@ -14,7 +14,7 @@
 
 #define MOT_PIN      14
 #define TOUCH_PIN    2
-#define PULSE_US     1000
+#define PULSE_US     100
 #define PERIOD_MS    10
 
 #define PS2_CLK      3
@@ -222,6 +222,11 @@ void loop() {
         boot_grace = false;
     } else {
         ramp = 0;
+        // Clear burst immediately on no PS/2 data to prevent stale repeat
+        cli();
+        burst[0] = 0x00; burst[1] = 0x00; burst[2] = 0x00; burst[3] = 0x00;
+        sei();
+        ps2_last_pkt_ms = 0;
         PS2Trackpoint::Error err = ps2.lastError();
         static PS2Trackpoint::Error last_err = PS2Trackpoint::ERR_OK;
         static unsigned long last_err_print = 0;
@@ -231,8 +236,6 @@ void loop() {
             last_err_print = millis();
         }
     }
-
-    if (ps2_last_pkt_ms && (millis() - ps2_last_pkt_ms > 500)) {
         cli();
         burst[0] = 0x00; burst[1] = 0x00; burst[2] = 0x00; burst[3] = 0x00;
         sei();
