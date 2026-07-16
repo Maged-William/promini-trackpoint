@@ -140,7 +140,7 @@ static void enter_sleep() {
     pinMode(13, OUTPUT);
     digitalWrite(13, LOW);
 
-    attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
+    attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, CHANGE);
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
 
@@ -149,11 +149,11 @@ static void enter_sleep() {
     // Restore power rails
     digitalWrite(VCC_PIN, LOW);   // P-MOSFET ON — VCC connected
     digitalWrite(NPN_PIN, HIGH);  // NPN ON — GND connected
-    delay(5);  // let power stabilize
+    delay(100);  // let power stabilize
 
     // Re-init PS/2 pins (INPUT_PULLUP) and let TrackPoint power on
     ps2.begin();
-    delay(50);
+    delay(100);
 
     // Restore SPI
     SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
