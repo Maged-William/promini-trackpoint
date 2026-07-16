@@ -14,7 +14,7 @@
 
 #define MOT_PIN      14
 #define TOUCH_PIN    2
-#define PULSE_US     100
+#define PULSE_US     1000
 #define PERIOD_MS    10
 
 #define PS2_CLK      3
