@@ -166,6 +166,13 @@ static void enter_sleep() {
 }
 
 void setup() {
+    // Blink D13 3x fast so we can confirm Exp14 is running
+    pinMode(13, OUTPUT);
+    for (uint8_t i = 0; i < 6; i++) {
+        digitalWrite(13, i & 1);
+        delay(100);
+    }
+
     pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
 
