@@ -1,15 +1,15 @@
 // PMW3610 SPI Slave Emulator — Exp16
 // Synthetic rectangle over BLE — clone of Exp05 with current pin mapping.
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
-// 25 Hz MOT (40ms period) — align with BLE connection interval.
+// 50 Hz MOT (20ms period) — match BLE throughput.
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
 // No PS/2, no sleep, no power switching — pure synthetic test.
 //
 // Rectangle (200×200 px, ~4.5s loop):
-//   A→B: Fast right     (+8,  0) ×  25 steps  200 px/s
-//   B→C: Slow down      ( 0, +4) ×  50 steps  100 px/s
-//   C→D: Extrafast left (-16, 0) ×  13 steps  400 px/s (~208px)
-//   D→A: Normal up      ( 0, -8) ×  25 steps  200 px/s
+//   A→B: Fast right     (+4,  0) ×  50 steps  200 px/s
+//   B→C: Slow down      ( 0, +2) × 100 steps  100 px/s
+//   C→D: Extrafast left (-8,  0) ×  25 steps  400 px/s
+//   D→A: Normal up      ( 0, -4) ×  50 steps  200 px/s
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -18,13 +18,13 @@
 
 #define MOT_PIN      14
 #define PULSE_US     100
-#define PERIOD_MS    40
+#define PERIOD_MS    20
 
 static const int8_t rect_data[4][3] PROGMEM = {
-    {  8,  0, 25  },   // A→B: Fast right     (+8,  0) ×  25  200 px/s
-    {  0,  4, 50  },   // B→C: Slow down      ( 0, +4) ×  50  100 px/s
-    { -16, 0, 13  },   // C→D: Extrafast left (-16, 0) ×  13  400 px/s
-    {  0, -8, 25  },   // D→A: Normal up      ( 0, -8) ×  25  200 px/s
+    {  4,  0, 50  },   // A→B: Fast right     (+4,  0) ×  50  200 px/s
+    {  0,  2, 100 },   // B→C: Slow down      ( 0, +2) × 100  100 px/s
+    { -8,  0, 25  },   // C→D: Extrafast left (-8,  0) ×  25  400 px/s
+    {  0, -4, 50  },   // D→A: Normal up      ( 0, -4) ×  50  200 px/s
 };
 
 #define BURST_SIZE     7
@@ -133,8 +133,8 @@ void setup() {
     state = S_IDLE;
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp16b ---");
-    Serial.println("Synthetic rectangle over BLE (25 Hz)");
+    Serial.println("--- PMW3610 emulator Exp16c ---");
+    Serial.println("Synthetic rectangle over BLE (50 Hz)");
 }
 
 void loop() {
