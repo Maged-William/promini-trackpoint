@@ -4,11 +4,11 @@
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
 // No PS/2, no sleep, no power switching — pure synthetic test.
 //
-// Rectangle (200×200 px, ~4.5s loop):
-//   A→B: Fast right     (+4,  0) ×  50 steps  200 px/s
-//   B→C: Slow down      ( 0, +2) × 100 steps  100 px/s
-//   C→D: Extrafast left (-8,  0) ×  25 steps  400 px/s
-//   D→A: Normal up      ( 0, -4) ×  50 steps  200 px/s
+// Rectangle (400×400 px, ~9s loop):
+//   A→B: Fast right     (+4,  0) × 100 steps  200 px/s
+//   B→C: Slow down      ( 0, +2) × 200 steps  100 px/s
+//   C→D: Extrafast left (-8,  0) ×  50 steps  400 px/s
+//   D→A: Normal up      ( 0, -4) × 100 steps  200 px/s
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -20,10 +20,10 @@
 #define PERIOD_MS    20
 
 static const int8_t rect_data[4][3] PROGMEM = {
-    {  4,  0, 50  },   // A→B: Fast right     (+4,  0) ×  50  200 px/s
-    {  0,  2, 100 },   // B→C: Slow down      ( 0, +2) × 100  100 px/s
-    { -8,  0, 25  },   // C→D: Extrafast left (-8,  0) ×  25  400 px/s
-    {  0, -4, 50  },   // D→A: Normal up      ( 0, -4) ×  50  200 px/s
+    {  4,  0, 100 },   // A→B: Fast right     (+4,  0) × 100  200 px/s
+    {  0,  2, 200 },   // B→C: Slow down      ( 0, +2) × 200  100 px/s
+    { -8,  0, 50  },   // C→D: Extrafast left (-8,  0) ×  50  400 px/s
+    {  0, -4, 100 },   // D→A: Normal up      ( 0, -4) × 100  200 px/s
 };
 
 #define BURST_SIZE     7
