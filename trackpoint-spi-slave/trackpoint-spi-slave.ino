@@ -1,8 +1,6 @@
-// PMW3610 SPI Slave Emulator — Exp16
-// Synthetic rectangle over BLE — clone of Exp05 with current pin mapping.
+// PMW3610 SPI Slave Emulator — Exp16g
+// Raw deltas, 50 Hz MOT. All smoothing moved to ZMK driver.
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
-// 50 Hz MOT (20ms period) — match BLE throughput.
-// Per-axis rate limiter (MAX_CHANGE=1) — matches &mmv's ±1-per-event approach.
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
 // No PS/2, no sleep, no power switching — pure synthetic test.
 //
@@ -44,39 +42,19 @@ static uint8_t regs[128];
 static uint8_t segment = 0;
 static uint8_t step_in_seg = 0;
 
-#define MAX_CHANGE 1
-
-static int8_t dx_current = 0;
-static int8_t dy_current = 0;
-
 static void update_rect_step(void) {
-    int8_t dx_target = pgm_read_byte(&rect_data[segment][0]);
-    int8_t dy_target = pgm_read_byte(&rect_data[segment][1]);
+    int8_t dx = pgm_read_byte(&rect_data[segment][0]);
+    int8_t dy = pgm_read_byte(&rect_data[segment][1]);
 
-    if (dx_current < dx_target) {
-        dx_current += MAX_CHANGE;
-        if (dx_current > dx_target) dx_current = dx_target;
-    } else if (dx_current > dx_target) {
-        dx_current -= MAX_CHANGE;
-        if (dx_current < dx_target) dx_current = dx_target;
-    }
-
-    if (dy_current < dy_target) {
-        dy_current += MAX_CHANGE;
-        if (dy_current > dy_target) dy_current = dy_target;
-    } else if (dy_current > dy_target) {
-        dy_current -= MAX_CHANGE;
-        if (dy_current < dy_target) dy_current = dy_target;
-    }
-
-    uint16_t dx_12 = (dx_current >= 0) ? (uint16_t)dx_current : (uint16_t)(4096 + dx_current);
-    uint16_t dy_12 = (dy_current >= 0) ? (uint16_t)dy_current : (uint16_t)(4096 + dy_current);
+    uint16_t dx_12 = (dx >= 0) ? (uint16_t)dx : (uint16_t)(4096 + dx);
+    uint16_t dy_12 = (dy >= 0) ? (uint16_t)dy : (uint16_t)(4096 + dy);
 
     cli();
-    burst[1] = (uint8_t)(dx_12 & 0xFF);        // X_L
-    burst[2] = (uint8_t)(dy_12 & 0xFF);        // Y_L
+    burst[1] = (uint8_t)(dx_12 & 0xFF);
+    burst[2] = (uint8_t)(dy_12 & 0xFF);
     burst[3] = ((uint8_t)(dx_12 >> 4) & 0xF0)
-             | ((uint8_t)(dy_12 >> 8) & 0x0F); // XY_H
+             | ((uint8_t)(dy_12 >> 8) & 0x0F);
+    burst[0] = (dx || dy) ? 0x01 : 0x00;
     sei();
 
     step_in_seg++;
@@ -145,7 +123,7 @@ void setup() {
     PCMSK0 |= _BV(PCINT2);
 
     burst[0] = 0x01;
-    burst[1] = 0x02;
+    burst[1] = 0x04;
     burst[2] = 0x00;
     burst[3] = 0x00;
     burst[4] = 0x00;
@@ -155,8 +133,8 @@ void setup() {
     state = S_IDLE;
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp16f ---");
-    Serial.println("Synthetic rectangle over BLE (50 Hz)");
+    Serial.println("--- PMW3610 emulator Exp16g ---");
+    Serial.println("Raw deltas, 50 Hz MOT");
 }
 
 void loop() {
