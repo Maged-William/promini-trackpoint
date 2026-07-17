@@ -2,6 +2,7 @@
 // Synthetic rectangle over BLE — clone of Exp05 with current pin mapping.
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
 // 50 Hz MOT (20ms period) — match BLE throughput.
+// Exponential smoothing (SMOOTH_FACTOR=4) — eases into each velocity target.
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
 // No PS/2, no sleep, no power switching — pure synthetic test.
 //
@@ -43,12 +44,23 @@ static uint8_t regs[128];
 static uint8_t segment = 0;
 static uint8_t step_in_seg = 0;
 
-static void update_rect_step(void) {
-    int8_t dx = pgm_read_byte(&rect_data[segment][0]);
-    int8_t dy = pgm_read_byte(&rect_data[segment][1]);
+#define SMOOTH_FACTOR 4
 
-    uint16_t dx_12 = (dx >= 0) ? (uint16_t)dx : (uint16_t)(4096 + dx);
-    uint16_t dy_12 = (dy >= 0) ? (uint16_t)dy : (uint16_t)(4096 + dy);
+static int16_t dx_current = 0;
+static int16_t dy_current = 0;
+
+static void update_rect_step(void) {
+    int8_t dx_target = pgm_read_byte(&rect_data[segment][0]);
+    int8_t dy_target = pgm_read_byte(&rect_data[segment][1]);
+
+    dx_current += (dx_target - dx_current) / SMOOTH_FACTOR;
+    dy_current += (dy_target - dy_current) / SMOOTH_FACTOR;
+
+    if (abs(dx_current) < 1) dx_current = 0;
+    if (abs(dy_current) < 1) dy_current = 0;
+
+    uint16_t dx_12 = (dx_current >= 0) ? (uint16_t)dx_current : (uint16_t)(4096 + dx_current);
+    uint16_t dy_12 = (dy_current >= 0) ? (uint16_t)dy_current : (uint16_t)(4096 + dy_current);
 
     cli();
     burst[1] = (uint8_t)(dx_12 & 0xFF);        // X_L
@@ -133,7 +145,7 @@ void setup() {
     state = S_IDLE;
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp16c ---");
+    Serial.println("--- PMW3610 emulator Exp16d ---");
     Serial.println("Synthetic rectangle over BLE (50 Hz)");
 }
 
