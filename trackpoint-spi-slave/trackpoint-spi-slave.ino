@@ -1,8 +1,9 @@
-// PMW3610 SPI Slave Emulator — Exp05
-// Rectangle speed test — final.
+// PMW3610 SPI Slave Emulator — Exp16
+// Synthetic rectangle over BLE — clone of Exp05 with current pin mapping.
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
 // 100 Hz MOT (10ms period) for smooth cursor movement.
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
+// No PS/2, no sleep, no power switching — pure synthetic test.
 //
 // Rectangle (200×200 px, ~4.5s loop):
 //   A→B: Fast right     (+2,  0) × 100 steps  200 px/s
@@ -15,12 +16,10 @@
 #include <avr/pgmspace.h>
 #include <Arduino.h>
 
-#define MOT_PIN      2
+#define MOT_PIN      14
 #define PULSE_US     100
 #define PERIOD_MS    10
 
-// Rectangle segment data: {dx, dy, steps}
-// dx/dy are signed 8-bit, converted to 12-bit two's complement at runtime
 static const int8_t rect_data[4][3] PROGMEM = {
     {  2,  0, 100 },   // A→B: Fast right     (+2,  0) × 100
     {  0,  1, 200 },   // B→C: Slow down      ( 0, +1) × 200
@@ -48,7 +47,6 @@ static void update_rect_step(void) {
     int8_t dx = pgm_read_byte(&rect_data[segment][0]);
     int8_t dy = pgm_read_byte(&rect_data[segment][1]);
 
-    // Convert signed 8-bit to 12-bit two's complement
     uint16_t dx_12 = (dx >= 0) ? (uint16_t)dx : (uint16_t)(4096 + dx);
     uint16_t dy_12 = (dy >= 0) ? (uint16_t)dy : (uint16_t)(4096 + dy);
 
@@ -67,11 +65,8 @@ static void update_rect_step(void) {
     }
 }
 
-// ── SPI Interrupt ──
-// Handles every byte immediately, even during Serial.print.
-// Eliminates the polling gap that corrupts the state machine.
 ISR(SPI_STC_vect) {
-    uint8_t received = SPDR;  // clears SPIF
+    uint8_t received = SPDR;
     spi_byte_count++;
 
     if (state == S_IDLE) {
@@ -108,50 +103,48 @@ ISR(SPI_STC_vect) {
 }
 
 ISR(PCINT0_vect) {
-    // CS changed state — not needed with interrupt-driven SPI.
 }
 
 void setup() {
+    pinMode(13, OUTPUT);
+    for (uint8_t i = 0; i < 6; i++) {
+        digitalWrite(13, i & 1);
+        delay(100);
+    }
+
     pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
 
     pinMode(MISO, OUTPUT);
-    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);  // SPI slave, mode 3, interrupt
+    SPCR = _BV(SPE) | _BV(SPIE) | _BV(CPOL) | _BV(CPHA);
     SPDR = 0x00;
 
     PCICR  |= _BV(PCIE0);
-    PCMSK0 |= _BV(PCINT2);  // PB2 = SS/D10 (CS)
+    PCMSK0 |= _BV(PCINT2);
 
-    // Initialize burst with segment 0 values (A→B: +2, 0)
-    burst[0] = 0x01;  // MOTION — motion detected
-    burst[1] = 0x02;  // DELTA_X_L = 2
-    burst[2] = 0x00;  // DELTA_Y_L = 0
-    burst[3] = 0x00;  // DELTA_XY_H
-    burst[4] = 0x00;  // SQUAL
-    burst[5] = 0x00;  // SHUTTER_H
-    burst[6] = 0x00;  // SHUTTER_L
-
-    // Register file (reads use these for single-register access)
-    // All zeros by default (global), which is fine.
+    burst[0] = 0x01;
+    burst[1] = 0x02;
+    burst[2] = 0x00;
+    burst[3] = 0x00;
+    burst[4] = 0x00;
+    burst[5] = 0x00;
+    burst[6] = 0x00;
 
     state = S_IDLE;
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp05b ---");
-    Serial.println("Rectangle speed test (100 Hz MOT)");
+    Serial.println("--- PMW3610 emulator Exp16 ---");
+    Serial.println("Synthetic rectangle over BLE");
 }
 
 void loop() {
-    static unsigned long last_step     = 0;
-    static bool          pulsed        = false;
-    static unsigned long last_pulse_us = 0;
+    static unsigned long last_step      = 0;
+    static bool          pulsed         = false;
+    static unsigned long last_pulse_us  = 0;
 
-    static uint8_t       last_spi_cnt  = 0;
+    static uint8_t       last_spi_cnt   = 0;
     static unsigned long last_spi_print = 0;
 
-    // ── SPI handled by ISR (SPI_STC_vect) — no polling needed
-
-    // ── MOT pin pulse (triggers ZMK burst read) ──
     if (!pulsed && (millis() - last_step >= PERIOD_MS)) {
         update_rect_step();
         digitalWrite(MOT_PIN, LOW);
@@ -163,7 +156,6 @@ void loop() {
         pulsed = false;
     }
 
-    // ── Serial debug ──
     if (millis() - last_spi_print >= 2000) {
         uint8_t cnt = spi_byte_count;
         if (cnt != last_spi_cnt) {
