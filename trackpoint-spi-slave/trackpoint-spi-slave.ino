@@ -2,7 +2,7 @@
 // Synthetic rectangle over BLE — clone of Exp05 with current pin mapping.
 // Interrupt-driven SPI (SPI_STC_vect) — never misses a byte.
 // 50 Hz MOT (20ms period) — match BLE throughput.
-// Per-axis rate limiter (MAX_CHANGE=2) — smooths each axis independently.
+// Per-axis rate limiter (MAX_CHANGE=1) — matches &mmv's ±1-per-event approach.
 // Per-byte SPI transactions with CS deassertion (Exp04 proven).
 // No PS/2, no sleep, no power switching — pure synthetic test.
 //
@@ -44,7 +44,7 @@ static uint8_t regs[128];
 static uint8_t segment = 0;
 static uint8_t step_in_seg = 0;
 
-#define MAX_CHANGE 2
+#define MAX_CHANGE 1
 
 static int8_t dx_current = 0;
 static int8_t dy_current = 0;
@@ -155,7 +155,7 @@ void setup() {
     state = S_IDLE;
 
     Serial.begin(115200);
-    Serial.println("--- PMW3610 emulator Exp16e ---");
+    Serial.println("--- PMW3610 emulator Exp16f ---");
     Serial.println("Synthetic rectangle over BLE (50 Hz)");
 }
 
