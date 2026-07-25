@@ -109,6 +109,7 @@ void loop() {
 
     int8_t x, y;
     uint8_t buttons;
+    static unsigned long dbg_ms = 0;
 
     if (digitalRead(TOUCH_PIN) == HIGH) {
         if (ps2.readPacket(x, y, buttons)) {
@@ -128,6 +129,17 @@ void loop() {
     } else {
         burst_x = 0;
         burst_y = 0;
+    }
+
+    if (millis() - dbg_ms >= 50) {
+        dbg_ms = millis();
+        Serial.print(digitalRead(TOUCH_PIN) ? "T" : ".");
+        if (burst_x || burst_y) {
+            Serial.print(" "); Serial.print(burst_x);
+            Serial.print(","); Serial.println(burst_y);
+        } else {
+            Serial.println();
+        }
     }
 
     if (!pulsed && (millis() - last_mot >= MOT_PERIOD_MS)) {
