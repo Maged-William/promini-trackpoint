@@ -109,25 +109,27 @@ void loop() {
 
     int8_t x, y;
     uint8_t buttons;
+    static unsigned long last_ps2_ms = 0;
 
-    if (digitalRead(TOUCH_PIN) == HIGH) {
-        if (ps2.readPacket(x, y, buttons)) {
-            idle_start = 0;
-            boot_grace = false;
-            if (abs(x) >= 127 || abs(y) >= 127) {
-            } else if (wake_discard) {
-                wake_discard--;
-            } else {
-                if (abs(x) < 3 && abs(y) < 3) {
-                    x = 0; y = 0;
-                }
-                burst_x = x;
-                burst_y = y;
+    if (ps2.readPacket(x, y, buttons)) {
+        idle_start = 0;
+        boot_grace = false;
+        last_ps2_ms = millis();
+        if (abs(x) >= 127 || abs(y) >= 127) {
+        } else if (wake_discard) {
+            wake_discard--;
+        } else {
+            if (abs(x) < 3 && abs(y) < 3) {
+                x = 0; y = 0;
             }
+            burst_x = x;
+            burst_y = y;
         }
-    } else {
-        burst_x = 0;
-        burst_y = 0;
+    } else if (burst_x != 0 || burst_y != 0) {
+        if (millis() - last_ps2_ms > 100) {
+            burst_x = 0;
+            burst_y = 0;
+        }
     }
 
     if (!pulsed && (millis() - last_mot >= MOT_PERIOD_MS)) {
