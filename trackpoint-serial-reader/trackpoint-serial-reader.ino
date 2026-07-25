@@ -10,7 +10,15 @@
 
 PS2Trackpoint ps2(CLK_PIN, DAT_PIN);
 
+#define NPN_GND_PIN 4
+#define PMOS_VCC_PIN 6
+
 void setup() {
+    pinMode(NPN_GND_PIN, OUTPUT);
+    digitalWrite(NPN_GND_PIN, HIGH);
+    pinMode(PMOS_VCC_PIN, OUTPUT);
+    digitalWrite(PMOS_VCC_PIN, LOW);
+
     Serial.begin(115200);
     Serial.println("--- Exp06: TrackPoint Serial Reader ---");
 
