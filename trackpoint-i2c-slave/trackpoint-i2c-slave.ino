@@ -48,6 +48,7 @@ static void enter_sleep() {
     digitalWrite(MOT_PIN, HIGH);
     digitalWrite(LED_PIN, LOW);
 
+    TWCR = 0;
     attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
@@ -68,7 +69,7 @@ void setup() {
     digitalWrite(NPN_PIN, HIGH);
     pinMode(PMOS_PIN, OUTPUT);
     digitalWrite(PMOS_PIN, LOW);
-    pinMode(TOUCH_PIN, INPUT);
+    pinMode(TOUCH_PIN, INPUT_PULLUP);
 
     pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
