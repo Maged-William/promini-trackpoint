@@ -24,7 +24,7 @@ PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 static uint8_t cur_addr;
 static int8_t  burst_x;
 static int8_t  burst_y;
-static uint8_t wake_discard;
+static uint8_t wake_discard = 5;
 
 void requestEvent() {
     if (cur_addr == BURST_ADDR) {
@@ -111,7 +111,8 @@ void loop() {
     uint8_t buttons;
 
     if (ps2.readPacket(x, y, buttons)) {
-        if (wake_discard) {
+        if (abs(x) >= 127 || abs(y) >= 127) {
+        } else if (wake_discard) {
             wake_discard--;
         } else {
             x = -x;
