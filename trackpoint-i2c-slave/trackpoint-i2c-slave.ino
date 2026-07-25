@@ -11,18 +11,28 @@
 static uint8_t regs[128];
 static uint8_t current_addr;
 
-// Rectangle: uniform +4/-4 all directions
-static const int8_t rect_seg[4][3] = {
-    {  4,  0, 50 },   // A->B: Right   (+4,  0) x  50  200 px/s
-    {  0,  4, 50 },   // B->C: Down    ( 0, +4) x  50  200 px/s
-    { -4,  0, 50 },   // C->D: Left    (-4,  0) x  50  200 px/s
-    {  0, -4, 50 },   // D->A: Up      ( 0, -4) x  50  200 px/s
+// Segments: dx, dy, steps, skip (extra MOT cycles to idle between updates)
+// update_interval = (skip + 1) * MOT_PERIOD_MS
+// Speed = dx / update_interval
+static const int8_t rect_seg[4][4] = {
+    {  4,  0, 50, 9  },   // Right 0.1x: +4/200ms = 20 px/s
+    {  0, 32,  6, 0  },   // Down    8x: +32/20ms = 1600 px/s
+    { -4,  0, 50, 0  },   // Left    1x: -4/20ms = 200 px/s
+    {  0, -4, 50, 0  },   // Up      1x: -4/20ms = 200 px/s
 };
 
 static uint8_t segment = 0;
 static uint8_t step_in_seg = 0;
+static uint8_t skip_cnt = 0;
 
 static void advance_rect(void) {
+    int8_t skip = rect_seg[segment][3];
+    if (skip_cnt < skip) {
+        skip_cnt++;
+        return;
+    }
+    skip_cnt = 0;
+
     int8_t dx = rect_seg[segment][0];
     int8_t dy = rect_seg[segment][1];
     regs[0x02] = (uint8_t)(int8_t)dx;
@@ -32,6 +42,7 @@ static void advance_rect(void) {
     if (step_in_seg >= rect_seg[segment][2]) {
         segment = (segment + 1) & 3;
         step_in_seg = 0;
+        skip_cnt = 0;
     }
 }
 
@@ -63,14 +74,12 @@ void setup() {
 
     regs[0x00] = 0x3E;
 
-    advance_rect();
-
     Wire.begin(I2C_ADDR);
     Wire.onRequest(requestEvent);
     Wire.onReceive(receiveEvent);
 
     Serial.begin(115200);
-    Serial.println("--- I2C Slave Exp18 raw int8 ---");
+    Serial.println("--- I2C Slave Exp18 speed variants ---");
 }
 
 void loop() {
