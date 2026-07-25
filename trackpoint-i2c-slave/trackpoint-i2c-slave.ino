@@ -74,7 +74,7 @@ static void enter_sleep() {
     burst_x = 0;
     burst_y = 0;
     cur_addr = 0;
-    wake_discard = 3;
+    wake_discard = 5;
 
     Serial.println("Woke!");
 }
@@ -115,8 +115,11 @@ void loop() {
             wake_discard--;
         } else {
             x = -x;
-            burst_x = x;
-            burst_y = y;
+            if (abs(x) < 3 && abs(y) < 3) {
+                x = 0; y = 0;
+            }
+            burst_x = y;
+            burst_y = x;
             idle_start = 0;
             boot_grace = false;
         }
