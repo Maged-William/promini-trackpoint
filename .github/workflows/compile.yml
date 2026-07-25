@@ -23,10 +23,21 @@ jobs:
           arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build trackpoint-spi-slave/
           rm -f build/*.elf build/*.bin build/*.with_bootloader.*
 
+      - name: Compile I2C Slave Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-i2c trackpoint-i2c-slave/
+          rm -f build-i2c/*.elf build-i2c/*.bin build-i2c/*.with_bootloader.*
+
       - name: Upload SPI Slave Binary
         uses: actions/upload-artifact@v4
         with:
           name: pro-mini-spi-slave
           path: build/
+
+      - name: Upload I2C Slave Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-i2c-slave
+          path: build-i2c/
 
 
