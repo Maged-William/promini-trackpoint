@@ -118,13 +118,11 @@ void loop() {
             } else if (wake_discard) {
                 wake_discard--;
             } else {
-                x = -x;
-                y = -y;
                 if (abs(x) < 3 && abs(y) < 3) {
                     x = 0; y = 0;
                 }
-                burst_x = y;
-                burst_y = x;
+                burst_x = x;
+                burst_y = y;
             }
         }
     } else {
