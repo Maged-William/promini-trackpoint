@@ -15,10 +15,10 @@ static uint8_t current_addr;
 // update_interval = (skip + 1) * MOT_PERIOD_MS
 // Speed = dx / update_interval
 static const int8_t rect_seg[4][4] = {
-    {  4,  0, 50, 9  },   // Right 0.1x: +4/200ms = 20 px/s
-    {  0, 32,  6, 0  },   // Down    8x: +32/20ms = 1600 px/s
-    { -4,  0, 50, 0  },   // Left    1x: -4/20ms = 200 px/s
-    {  0, -4, 50, 0  },   // Up      1x: -4/20ms = 200 px/s
+    {  1,  0, 200, 1  },   // Right 0.1x: +1/40ms = 25 px/s (smooth)
+    {  0, 16,  12, 0  },   // Down    4x: +16/20ms = 800 px/s (halved)
+    { -4,  0, 50,  0  },   // Left    1x: -4/20ms = 200 px/s
+    {  0, -4, 50,  0  },   // Up      1x: -4/20ms = 200 px/s
 };
 
 static uint8_t segment = 0;
