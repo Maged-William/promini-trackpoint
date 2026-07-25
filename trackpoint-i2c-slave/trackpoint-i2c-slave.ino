@@ -24,6 +24,7 @@ PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 static uint8_t cur_addr;
 static int8_t  burst_x;
 static int8_t  burst_y;
+static uint8_t wake_discard;
 
 void requestEvent() {
     if (cur_addr == BURST_ADDR) {
@@ -73,6 +74,7 @@ static void enter_sleep() {
     burst_x = 0;
     burst_y = 0;
     cur_addr = 0;
+    wake_discard = 3;
 
     Serial.println("Woke!");
 }
@@ -109,11 +111,15 @@ void loop() {
     uint8_t buttons;
 
     if (ps2.readPacket(x, y, buttons)) {
-        x = -x;
-        burst_x = x;
-        burst_y = y;
-        idle_start = 0;
-        boot_grace = false;
+        if (wake_discard) {
+            wake_discard--;
+        } else {
+            x = -x;
+            burst_x = x;
+            burst_y = y;
+            idle_start = 0;
+            boot_grace = false;
+        }
     }
 
     if (!pulsed && (millis() - last_mot >= MOT_PERIOD_MS)) {
