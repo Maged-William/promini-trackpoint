@@ -5,8 +5,8 @@
 
 #include <PS2Trackpoint.h>
 
-#define CLK_PIN  7
-#define DAT_PIN  3
+#define CLK_PIN  3
+#define DAT_PIN  7
 
 PS2Trackpoint ps2(CLK_PIN, DAT_PIN);
 
