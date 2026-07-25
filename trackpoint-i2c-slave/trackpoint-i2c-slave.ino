@@ -122,8 +122,8 @@ void loop() {
             if (abs(x) < 3 && abs(y) < 3) {
                 x = 0; y = 0;
             }
-            burst_x = y;
-            burst_y = x;
+            burst_x = -y;
+            burst_y = -x;
             Serial.print("X:"); Serial.print(burst_x);
             Serial.print(" Y:"); Serial.println(burst_y);
         }
