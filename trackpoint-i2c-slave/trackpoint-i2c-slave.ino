@@ -11,12 +11,11 @@
 static uint8_t regs[128];
 static uint8_t current_addr;
 
-// Segments: dx, dy, steps, skip (extra MOT cycles to idle between updates)
+// Segments: dx, dy, steps, skip
 // update_interval = (skip + 1) * MOT_PERIOD_MS
-// Speed = dx / update_interval
 static const int8_t rect_seg[4][4] = {
-    {  1,  0, 200, 1  },   // Right 0.1x: +1/40ms = 25 px/s (smooth)
-    {  0, 16,  12, 0  },   // Down    4x: +16/20ms = 800 px/s (halved)
+    {  4,  0, 50,  1  },   // Right 0.5x: +4/40ms = 100 px/s (smooth 25fps)
+    {  0, 16,  12, 0  },   // Down    4x: +16/20ms = 800 px/s
     { -4,  0, 50,  0  },   // Left    1x: -4/20ms = 200 px/s
     {  0, -4, 50,  0  },   // Up      1x: -4/20ms = 200 px/s
 };
