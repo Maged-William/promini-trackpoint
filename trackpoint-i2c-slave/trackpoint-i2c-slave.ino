@@ -1,99 +1,132 @@
 #include <Wire.h>
+#include <PS2Trackpoint.h>
+#include <LowPower.h>
 
-#define I2C_ADDR      0x42
-#define MOT_PIN       14
-#define LED_PIN       13
-#define MOT_PERIOD_MS 20
+#define I2C_ADDR     0x42
+#define MOT_PIN      14
+#define TOUCH_PIN    2
+#define NPN_PIN      4
+#define PMOS_PIN     6
+#define LED_PIN      13
+
+#define PS2_CLK      3
+#define PS2_DAT      7
+
+#define MOT_PERIOD_MS 10
 #define PULSE_US      100
-
 #define BURST_ADDR    0x12
 
-static uint8_t regs[128];
-static uint8_t current_addr;
+#define IDLE_TIMEOUT_MS 2000
+#define BOOT_GRACE_MS   15000
 
-// Segments: dx, dy, steps, skip
-// update_interval = (skip + 1) * MOT_PERIOD_MS
-static const int8_t rect_seg[4][4] = {
-    {  4,  0, 50,  1  },   // Right 0.5x: +4/40ms = 100 px/s (smooth 25fps)
-    {  0, 16,  12, 0  },   // Down    4x: +16/20ms = 800 px/s
-    { -4,  0, 50,  0  },   // Left    1x: -4/20ms = 200 px/s
-    {  0, -4, 50,  0  },   // Up      1x: -4/20ms = 200 px/s
-};
+PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
-static uint8_t segment = 0;
-static uint8_t step_in_seg = 0;
-static uint8_t skip_cnt = 0;
-
-static void advance_rect(void) {
-    int8_t skip = rect_seg[segment][3];
-    if (skip_cnt < skip) {
-        skip_cnt++;
-        return;
-    }
-    skip_cnt = 0;
-
-    int8_t dx = rect_seg[segment][0];
-    int8_t dy = rect_seg[segment][1];
-    regs[0x02] = (uint8_t)(int8_t)dx;
-    regs[0x03] = (uint8_t)(int8_t)dy;
-
-    step_in_seg++;
-    if (step_in_seg >= rect_seg[segment][2]) {
-        segment = (segment + 1) & 3;
-        step_in_seg = 0;
-        skip_cnt = 0;
-    }
-}
+static uint8_t cur_addr;
+static int8_t  burst_x;
+static int8_t  burst_y;
 
 void requestEvent() {
-    if (current_addr == BURST_ADDR) {
-        Wire.write(&regs[0x02], 2);
-        regs[0x02] = 0;
-        regs[0x03] = 0;
+    if (cur_addr == BURST_ADDR) {
+        uint8_t buf[2] = { (uint8_t)burst_x, (uint8_t)burst_y };
+        Wire.write(buf, 2);
     } else {
-        Wire.write(&regs[current_addr], 1);
+        Wire.write(0x00);
     }
 }
 
 void receiveEvent(int len) {
-    if (len > 0) {
-        current_addr = Wire.read();
-    }
+    if (len > 0) cur_addr = Wire.read();
 }
 
-void setup() {
-    pinMode(LED_PIN, OUTPUT);
-    for (uint8_t i = 0; i < 6; i++) {
-        digitalWrite(LED_PIN, i & 1);
-        delay(100);
-    }
+static void wakeUp() {}
 
-    pinMode(MOT_PIN, OUTPUT);
+static void enter_sleep() {
+    Serial.println("Sleeping...");
+    Serial.flush();
+    delay(10);
+
     digitalWrite(MOT_PIN, HIGH);
+    digitalWrite(LED_PIN, LOW);
 
-    regs[0x00] = 0x3E;
+    attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+    detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
 
     Wire.begin(I2C_ADDR);
     Wire.onRequest(requestEvent);
     Wire.onReceive(receiveEvent);
 
+    burst_x = 0;
+    burst_y = 0;
+    cur_addr = 0;
+
+    Serial.println("Woke!");
+}
+
+void setup() {
+    pinMode(NPN_PIN, OUTPUT);
+    digitalWrite(NPN_PIN, HIGH);
+    pinMode(PMOS_PIN, OUTPUT);
+    digitalWrite(PMOS_PIN, LOW);
+    pinMode(TOUCH_PIN, INPUT);
+
+    pinMode(MOT_PIN, OUTPUT);
+    digitalWrite(MOT_PIN, HIGH);
+
+    Wire.begin(I2C_ADDR);
+    Wire.onRequest(requestEvent);
+    Wire.onReceive(receiveEvent);
+
+    ps2.begin();
+
     Serial.begin(115200);
-    Serial.println("--- I2C Slave Exp18 speed variants ---");
+    Serial.println("--- I2C Slave + PS/2 + Sleep ---");
 }
 
 void loop() {
-    static unsigned long last_mot = 0;
-    static bool          pulsed  = false;
-    static unsigned long last_pulse_us = 0;
+    static unsigned long last_mot  = 0;
+    static bool          pulsed   = false;
+    static unsigned long pulse_us = 0;
+
+    static unsigned long idle_start = 0;
+    static bool          boot_grace = true;
+
+    int8_t x, y;
+    uint8_t buttons;
+
+    if (ps2.readPacket(x, y, buttons)) {
+        x = -x;
+        burst_x = x;
+        burst_y = y;
+        idle_start = 0;
+        boot_grace = false;
+    }
 
     if (!pulsed && (millis() - last_mot >= MOT_PERIOD_MS)) {
-        advance_rect();
         digitalWrite(MOT_PIN, LOW);
         pulsed = true;
-        last_pulse_us = micros();
+        pulse_us = micros();
         last_mot = millis();
-    } else if (pulsed && (micros() - last_pulse_us >= PULSE_US)) {
+    } else if (pulsed && (micros() - pulse_us >= PULSE_US)) {
         digitalWrite(MOT_PIN, HIGH);
+        burst_x = 0;
+        burst_y = 0;
         pulsed = false;
+    }
+
+    if (boot_grace && millis() > BOOT_GRACE_MS) {
+        boot_grace = false;
+        idle_start = millis();
+    }
+
+    if (!boot_grace && !pulsed) {
+        if (idle_start == 0) {
+            idle_start = millis();
+        } else if (millis() - idle_start >= IDLE_TIMEOUT_MS) {
+            enter_sleep();
+            last_mot  = millis();
+            pulsed    = false;
+            idle_start = 0;
+        }
     }
 }
