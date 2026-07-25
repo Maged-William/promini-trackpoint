@@ -11,12 +11,12 @@
 static uint8_t regs[128];
 static uint8_t current_addr;
 
-// Rectangle: Right(slow) -> Down(fast) -> Left(fast) -> Up(fast)
+// Rectangle: uniform +4/-4 all directions
 static const int8_t rect_seg[4][3] = {
-    {  1,  0, 200 },   // A->B: Right  slow   (+1,  0) x 200   50 px/s
-    {  0,  4,  50 },   // B->C: Down   fast   ( 0, +4) x  50  200 px/s
-    { -4,  0,  50 },   // C->D: Left   fast   (-4,  0) x  50  200 px/s
-    {  0, -4,  50 },   // D->A: Up     fast   ( 0, -4) x  50  200 px/s
+    {  4,  0, 50 },   // A->B: Right   (+4,  0) x  50  200 px/s
+    {  0,  4, 50 },   // B->C: Down    ( 0, +4) x  50  200 px/s
+    { -4,  0, 50 },   // C->D: Left    (-4,  0) x  50  200 px/s
+    {  0, -4, 50 },   // D->A: Up      ( 0, -4) x  50  200 px/s
 };
 
 static uint8_t segment = 0;
