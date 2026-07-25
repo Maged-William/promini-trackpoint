@@ -41,6 +41,12 @@ void receiveEvent(int len) {
 static void wakeUp() {}
 
 static void enter_sleep() {
+    pinMode(PS2_CLK, INPUT);
+    pinMode(PS2_DAT, INPUT);
+    digitalWrite(NPN_PIN, LOW);
+    digitalWrite(PMOS_PIN, HIGH);
+    delay(50);
+
     Serial.println("Sleeping...");
     Serial.flush();
     delay(10);
@@ -52,6 +58,13 @@ static void enter_sleep() {
     attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
+
+    digitalWrite(NPN_PIN, HIGH);
+    delay(5);
+    digitalWrite(PMOS_PIN, LOW);
+    delay(200);
+
+    ps2.begin();
 
     Wire.begin(I2C_ADDR);
     Wire.onRequest(requestEvent);
