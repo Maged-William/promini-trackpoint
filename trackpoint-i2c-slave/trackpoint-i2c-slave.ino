@@ -111,6 +111,8 @@ void loop() {
     uint8_t buttons;
 
     if (ps2.readPacket(x, y, buttons)) {
+        idle_start = 0;
+        boot_grace = false;
         if (abs(x) >= 127 || abs(y) >= 127) {
         } else if (wake_discard) {
             wake_discard--;
@@ -123,8 +125,6 @@ void loop() {
             burst_y = x;
             Serial.print("X:"); Serial.print(burst_x);
             Serial.print(" Y:"); Serial.println(burst_y);
-            idle_start = 0;
-            boot_grace = false;
         }
     }
 
