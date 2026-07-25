@@ -118,6 +118,7 @@ void loop() {
             wake_discard--;
         } else {
             x = -x;
+            y = -y;
             if (abs(x) < 3 && abs(y) < 3) {
                 x = 0; y = 0;
             }
