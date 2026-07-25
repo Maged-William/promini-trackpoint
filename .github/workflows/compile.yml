@@ -40,4 +40,15 @@ jobs:
           name: pro-mini-i2c-slave
           path: build-i2c/
 
+      - name: Compile Serial Reader Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-serial trackpoint-serial-reader/
+          rm -f build-serial/*.elf build-serial/*.bin build-serial/*.with_bootloader.*
+
+      - name: Upload Serial Reader Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-serial-reader
+          path: build-serial/
+
 
