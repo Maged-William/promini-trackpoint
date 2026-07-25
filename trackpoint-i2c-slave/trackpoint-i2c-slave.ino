@@ -120,6 +120,8 @@ void loop() {
             }
             burst_x = y;
             burst_y = x;
+            Serial.print("X:"); Serial.print(burst_x);
+            Serial.print(" Y:"); Serial.println(burst_y);
             idle_start = 0;
             boot_grace = false;
         }
