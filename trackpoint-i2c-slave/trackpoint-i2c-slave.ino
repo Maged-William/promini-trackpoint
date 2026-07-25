@@ -6,11 +6,55 @@
 #define MOT_PERIOD_MS 20
 #define PULSE_US      100
 
+#define BURST_ADDR    0x12
+
 static uint8_t regs[128];
 static uint8_t current_addr;
 
+// Rectangle: Right(slow) -> Down(fast) -> Left(fast) -> Up(fast)
+static const int8_t rect_seg[4][3] = {
+    {  1,  0, 200 },   // A->B: Right  slow   (+1,  0) x 200   50 px/s
+    {  0,  4,  50 },   // B->C: Down   fast   ( 0, +4) x  50  200 px/s
+    { -4,  0,  50 },   // C->D: Left   fast   (-4,  0) x  50  200 px/s
+    {  0, -4,  50 },   // D->A: Up     fast   ( 0, -4) x  50  200 px/s
+};
+
+static uint8_t segment = 0;
+static uint8_t step_in_seg = 0;
+
+static void encode_delta_12(int8_t dx, int8_t dy) {
+    uint16_t dx_12 = (dx >= 0) ? (uint16_t)dx : (uint16_t)(4096 + dx);
+    uint16_t dy_12 = (dy >= 0) ? (uint16_t)dy : (uint16_t)(4096 + dy);
+
+    regs[0x03] = (uint8_t)(dx_12 & 0xFF);         // X_L
+    regs[0x04] = (uint8_t)(dy_12 & 0xFF);         // Y_L
+    regs[0x05] = ((uint8_t)(dx_12 >> 4) & 0xF0)   // XY_H
+               | ((uint8_t)(dy_12 >> 8) & 0x0F);
+    regs[0x02] = (dx || dy) ? 0x01 : 0x00;        // MOTION
+}
+
+static void advance_rect(void) {
+    int8_t dx = rect_seg[segment][0];
+    int8_t dy = rect_seg[segment][1];
+    encode_delta_12(dx, dy);
+
+    step_in_seg++;
+    if (step_in_seg >= rect_seg[segment][2]) {
+        segment = (segment + 1) & 3;
+        step_in_seg = 0;
+    }
+}
+
 void requestEvent() {
-    Wire.write(&regs[current_addr], 1);
+    if (current_addr == BURST_ADDR) {
+        Wire.write(&regs[0x02], 7);
+        regs[0x02] = 0x00;
+        regs[0x03] = 0x00;
+        regs[0x04] = 0x00;
+        regs[0x05] = 0x00;
+    } else {
+        Wire.write(&regs[current_addr], 1);
+    }
 }
 
 void receiveEvent(int len) {
@@ -29,36 +73,29 @@ void setup() {
     pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
 
-    regs[0x00] = 0x3E;
-    regs[0x01] = 0x01;
-    regs[0x02] = 0x04;
-    regs[0x03] = 0x00;
-    regs[0x04] = 0x00;
-    regs[0x05] = 0x00;
-    regs[0x06] = 0x00;
-    regs[0x12] = 0x01;
-    regs[0x13] = 0x04;
-    regs[0x14] = 0x00;
-    regs[0x15] = 0x00;
-    regs[0x16] = 0x3E;
+    regs[0x00] = 0x3E;  // Product ID
+    regs[0x01] = 0x01;  // Revision ID
+    regs[0x06] = 0x00;  // SQUAL
+    regs[0x07] = 0x00;  // Shutter_H
+    regs[0x08] = 0x00;  // Shutter_L
+
+    advance_rect();
 
     Wire.begin(I2C_ADDR);
     Wire.onRequest(requestEvent);
     Wire.onReceive(receiveEvent);
 
     Serial.begin(115200);
-    Serial.print("--- I2C Slave 0x");
-    Serial.print(I2C_ADDR, HEX);
-    Serial.println(" (Exp17) ---");
+    Serial.println("--- I2C Slave 0x42 Exp18 Rectangle ---");
 }
 
 void loop() {
     static unsigned long last_mot = 0;
-    static bool pulsed = false;
+    static bool          pulsed  = false;
     static unsigned long last_pulse_us = 0;
-    static unsigned long last_print = 0;
 
     if (!pulsed && (millis() - last_mot >= MOT_PERIOD_MS)) {
+        advance_rect();
         digitalWrite(MOT_PIN, LOW);
         pulsed = true;
         last_pulse_us = micros();
@@ -66,14 +103,5 @@ void loop() {
     } else if (pulsed && (micros() - last_pulse_us >= PULSE_US)) {
         digitalWrite(MOT_PIN, HIGH);
         pulsed = false;
-    }
-
-    if (millis() - last_print >= 3000) {
-        Serial.print("regs[0x00]=");
-        Serial.print(regs[0x00], HEX);
-        Serial.print(" MOT=");
-        Serial.print(digitalRead(MOT_PIN));
-        Serial.println();
-        last_print = millis();
     }
 }
