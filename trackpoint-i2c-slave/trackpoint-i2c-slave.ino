@@ -101,6 +101,8 @@ void loop() {
     static unsigned long idle_start = 0;
     static bool          boot_grace = true;
     static uint8_t       was_moving = 0;
+    static unsigned long last_ps2_ms = 0;
+    static int8_t        prev_x = 0, prev_y = 0;
 
     int8_t x, y;
     uint8_t buttons;
@@ -109,6 +111,7 @@ void loop() {
         if (ps2.readPacket(x, y, buttons)) {
             idle_start = 0;
             boot_grace = false;
+            last_ps2_ms = millis();
             if (abs(x) >= 127 || abs(y) >= 127) {
             } else if (wake_discard) {
                 wake_discard--;
@@ -116,13 +119,27 @@ void loop() {
                 if (abs(x) < 3 && abs(y) < 3) {
                     x = 0; y = 0;
                 }
-                burst_x = x;
-                burst_y = y;
-                if (burst_x || burst_y) {
-                    Serial.print(burst_x);
-                    Serial.print(",");
-                    Serial.println(burst_y);
-                    was_moving = 1;
+                if (abs(x - prev_x) + abs(y - prev_y) > 60) {
+                } else {
+                    prev_x = x; prev_y = y;
+                    burst_x = x;
+                    burst_y = y;
+                    if (burst_x || burst_y) {
+                        Serial.print(burst_x);
+                        Serial.print(",");
+                        Serial.println(burst_y);
+                        was_moving = 1;
+                    }
+                }
+            }
+        }
+        if (burst_x || burst_y) {
+            if (millis() - last_ps2_ms > 100) {
+                burst_x = 0;
+                burst_y = 0;
+                if (was_moving) {
+                    Serial.println("0");
+                    was_moving = 0;
                 }
             }
         }
