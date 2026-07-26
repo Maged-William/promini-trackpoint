@@ -149,32 +149,14 @@ void loop() {
                         x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
                         y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
 
-                    if (abs(x) < 5 && abs(y) < 5) {
-                        x = 0; y = 0;
-                    }
-                    static unsigned long small_start = 0;
-                    if (abs(cx) < 12 && abs(cy) < 12) {
-                        if (!small_start) small_start = millis();
-                        else if (millis() - small_start > 500) {
-                            x = 0; y = 0;
-                        }
-                    } else {
-                        small_start = 0;
-                    }
-                    burst_x = x;
-                    burst_y = y;
+                        burst_x = x;
+                        burst_y = y;
                         if (burst_x || burst_y) {
                             Serial.print(burst_x);
                             Serial.print(",");
                             Serial.println(burst_y);
                             was_moving = 1;
                             pulse_mot();
-                            static uint16_t dbg_ctr = 0;
-                            if (++dbg_ctr % 10 == 0) {
-                                Serial.print("r"); Serial.print(raw_x); Serial.print(","); Serial.print(raw_y);
-                                Serial.print(" c"); Serial.print(calib_x); Serial.print(","); Serial.print(calib_y);
-                                Serial.print(" o"); Serial.print(burst_x); Serial.print(","); Serial.println(burst_y);
-                            }
                         }
                     }
                 }
