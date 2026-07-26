@@ -17,7 +17,7 @@
 #define IDLE_TIMEOUT_MS 1000
 #define BOOT_GRACE_MS   15000
 #define READ_INTERVAL_MS 20
-#define MAX_DELTA 60
+#define MAX_DELTA 25
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
