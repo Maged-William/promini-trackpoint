@@ -1,6 +1,5 @@
 #include <Wire.h>
 #include <PS2Trackpoint.h>
-#include <LowPower.h>
 
 #define I2C_ADDR     0x42
 #define MOT_PIN      14
@@ -14,8 +13,6 @@
 
 #define BURST_ADDR    0x12
 
-#define IDLE_TIMEOUT_MS 1000
-#define BOOT_GRACE_MS   15000
 #define READ_INTERVAL_MS 20
 #define MAX_DELTA 25
 
@@ -44,43 +41,10 @@ void receiveEvent(int len) {
     if (len > 0) cur_addr = Wire.read();
 }
 
-static void wakeUp() {}
-
 static void pulse_mot() {
     digitalWrite(MOT_PIN, LOW);
     delayMicroseconds(100);
     digitalWrite(MOT_PIN, HIGH);
-}
-
-static void enter_sleep() {
-    pinMode(PS2_CLK, INPUT);
-    pinMode(PS2_DAT, INPUT);
-
-    Serial.println("Sleeping...");
-    Serial.flush();
-    delay(10);
-
-    digitalWrite(MOT_PIN, HIGH);
-    digitalWrite(LED_PIN, LOW);
-
-    TWCR = 0;
-    attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
-    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-    detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
-
-    Wire.begin(I2C_ADDR);
-    Wire.onRequest(requestEvent);
-    Wire.onReceive(receiveEvent);
-
-    burst_x = 0;
-    burst_y = 0;
-    cur_addr = 0;
-    calibrated = false;
-    calib_x = 0; calib_y = 0;
-    calib_sum_x = 0; calib_sum_y = 0;
-    calib_count = 0;
-    calib_end_ms = millis() + 400;
-    Serial.println("Woke!");
 }
 
 void setup() {
@@ -104,8 +68,6 @@ void setup() {
 }
 
 void loop() {
-    static unsigned long idle_start = 0;
-    static bool          boot_grace = true;
     static uint8_t       was_moving = 0;
     static unsigned long last_ps2_ms = 0;
     static unsigned long last_read_ms = 0;
@@ -118,9 +80,6 @@ void loop() {
         if (now - last_read_ms >= READ_INTERVAL_MS) {
             last_read_ms = now;
             if (ps2.readPacket(x, y, buttons)) {
-                int8_t raw_x = x, raw_y = y;
-                idle_start = 0;
-                boot_grace = false;
                 last_ps2_ms = millis();
 
                 if (!calibrated) {
@@ -178,20 +137,6 @@ void loop() {
         if (was_moving) {
             Serial.println("0");
             was_moving = 0;
-        }
-    }
-
-    if (boot_grace && millis() > BOOT_GRACE_MS) {
-        boot_grace = false;
-        idle_start = millis();
-    }
-
-    if (!boot_grace) {
-        if (idle_start == 0) {
-            idle_start = millis();
-        } else if (millis() - idle_start >= IDLE_TIMEOUT_MS) {
-            enter_sleep();
-            idle_start = 0;
         }
     }
 }
