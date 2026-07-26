@@ -17,13 +17,15 @@
 #define IDLE_TIMEOUT_MS 1000
 #define BOOT_GRACE_MS   15000
 #define READ_INTERVAL_MS 20
+#define MAX_DELTA 60
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
 static uint8_t cur_addr;
 static int8_t  burst_x;
 static int8_t  burst_y;
-static uint8_t wake_discard = 5;
+static unsigned long wake_deadline = 0;
+static int32_t       base_x = 0, base_y = 0;
 
 
 void requestEvent() {
@@ -80,7 +82,9 @@ static void enter_sleep() {
     burst_x = 0;
     burst_y = 0;
     cur_addr = 0;
-    wake_discard = 5;
+    wake_deadline = millis() + 800;
+    base_x = 0;
+    base_y = 0;
     Serial.println("Woke!");
 }
 
@@ -110,7 +114,6 @@ void loop() {
     static uint8_t       was_moving = 0;
     static unsigned long last_ps2_ms = 0;
     static unsigned long last_read_ms = 0;
-    static int32_t       base_x = 0, base_y = 0;
 
 #define BASELINE_SHIFT  5
 #define BASELINE_FREEZE 8
@@ -123,13 +126,14 @@ void loop() {
         if (now - last_read_ms >= READ_INTERVAL_MS) {
             last_read_ms = now;
             if (ps2.readPacket(x, y, buttons)) {
+                int8_t raw_x = x, raw_y = y;
                 idle_start = 0;
                 boot_grace = false;
                 last_ps2_ms = millis();
 
-                if (wake_discard) {
-                    wake_discard--;
+                if (millis() < wake_deadline) {
                 } else if (abs(x) >= 127 || abs(y) >= 127) {
+                } else if (abs(x) > MAX_DELTA || abs(y) > MAX_DELTA) {
                 } else {
                     int32_t cx = (int32_t)x - (base_x >> BASELINE_SHIFT);
                     int32_t cy = (int32_t)y - (base_y >> BASELINE_SHIFT);
@@ -153,6 +157,12 @@ void loop() {
                         Serial.println(burst_y);
                         was_moving = 1;
                         pulse_mot();
+                        static uint16_t dbg_ctr = 0;
+                        if (++dbg_ctr % 10 == 0) {
+                            Serial.print("r"); Serial.print(raw_x); Serial.print(","); Serial.print(raw_y);
+                            Serial.print(" b"); Serial.print(base_x >> BASELINE_SHIFT); Serial.print(","); Serial.print(base_y >> BASELINE_SHIFT);
+                            Serial.print(" o"); Serial.print(burst_x); Serial.print(","); Serial.println(burst_y);
+                        }
                     }
                 }
             }
