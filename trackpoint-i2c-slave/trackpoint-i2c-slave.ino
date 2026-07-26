@@ -1,5 +1,6 @@
 #include <Wire.h>
 #include <PS2Trackpoint.h>
+#include <LowPower.h>
 
 #define I2C_ADDR     0x42
 #define MOT_PIN      14
@@ -15,6 +16,7 @@
 
 #define READ_INTERVAL_MS 20
 #define MAX_DELTA 25
+#define IDLE_TIMEOUT_MS 1000
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
@@ -40,6 +42,8 @@ void requestEvent() {
 void receiveEvent(int len) {
     if (len > 0) cur_addr = Wire.read();
 }
+
+static void wakeUp() {}
 
 static void pulse_mot() {
     digitalWrite(MOT_PIN, LOW);
@@ -138,5 +142,23 @@ void loop() {
             Serial.println("0");
             was_moving = 0;
         }
+    }
+
+    static unsigned long idle_start = 0;
+    if (digitalRead(TOUCH_PIN) == LOW) {
+        if (idle_start == 0) {
+            idle_start = millis();
+        } else if (millis() - idle_start >= IDLE_TIMEOUT_MS) {
+            idle_start = 0;
+            TWCR = 0;
+            attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
+            LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+            detachInterrupt(digitalPinToInterrupt(TOUCH_PIN));
+            Wire.begin(I2C_ADDR);
+            Wire.onRequest(requestEvent);
+            Wire.onReceive(receiveEvent);
+        }
+    } else {
+        idle_start = 0;
     }
 }
