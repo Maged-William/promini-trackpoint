@@ -12,8 +12,6 @@
 #define PS2_CLK      3
 #define PS2_DAT      7
 
-#define MOT_PERIOD_MS 10
-#define PULSE_US      100
 #define BURST_ADDR    0x12
 
 #define IDLE_TIMEOUT_MS 1000
@@ -100,16 +98,12 @@ void setup() {
 }
 
 void loop() {
-    static unsigned long last_mot  = 0;
-    static bool          pulsed   = false;
-    static unsigned long pulse_us = 0;
-
     static unsigned long idle_start = 0;
     static bool          boot_grace = true;
+    static uint8_t       was_moving = 0;
 
     int8_t x, y;
     uint8_t buttons;
-    static unsigned long dbg_ms = 0;
 
     if (digitalRead(TOUCH_PIN) == HIGH) {
         if (ps2.readPacket(x, y, buttons)) {
@@ -124,32 +118,21 @@ void loop() {
                 }
                 burst_x = x;
                 burst_y = y;
+                if (burst_x || burst_y) {
+                    Serial.print(burst_x);
+                    Serial.print(",");
+                    Serial.println(burst_y);
+                    was_moving = 1;
+                }
             }
         }
     } else {
         burst_x = 0;
         burst_y = 0;
-    }
-
-    if (millis() - dbg_ms >= 50) {
-        dbg_ms = millis();
-        Serial.print(digitalRead(TOUCH_PIN) ? "T" : ".");
-        if (burst_x || burst_y) {
-            Serial.print(" "); Serial.print(burst_x);
-            Serial.print(","); Serial.println(burst_y);
-        } else {
-            Serial.println();
+        if (was_moving) {
+            Serial.println("0");
+            was_moving = 0;
         }
-    }
-
-    if (!pulsed && (millis() - last_mot >= MOT_PERIOD_MS)) {
-        digitalWrite(MOT_PIN, LOW);
-        pulsed = true;
-        pulse_us = micros();
-        last_mot = millis();
-    } else if (pulsed && (micros() - pulse_us >= PULSE_US)) {
-        digitalWrite(MOT_PIN, HIGH);
-        pulsed = false;
     }
 
     if (boot_grace && millis() > BOOT_GRACE_MS) {
@@ -157,13 +140,11 @@ void loop() {
         idle_start = millis();
     }
 
-    if (!boot_grace && !pulsed) {
+    if (!boot_grace) {
         if (idle_start == 0) {
             idle_start = millis();
         } else if (millis() - idle_start >= IDLE_TIMEOUT_MS) {
             enter_sleep();
-            last_mot  = millis();
-            pulsed    = false;
             idle_start = 0;
         }
     }
