@@ -149,8 +149,6 @@ void loop() {
         last_mot = millis();
     } else if (pulsed && (micros() - pulse_us >= PULSE_US)) {
         digitalWrite(MOT_PIN, HIGH);
-        burst_x = 0;
-        burst_y = 0;
         pulsed = false;
     }
 
