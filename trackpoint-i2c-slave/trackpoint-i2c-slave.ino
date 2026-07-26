@@ -16,6 +16,7 @@
 
 #define IDLE_TIMEOUT_MS 1000
 #define BOOT_GRACE_MS   15000
+#define READ_INTERVAL_MS 20
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
@@ -39,6 +40,12 @@ void receiveEvent(int len) {
 }
 
 static void wakeUp() {}
+
+static void pulse_mot() {
+    digitalWrite(MOT_PIN, LOW);
+    delayMicroseconds(100);
+    digitalWrite(MOT_PIN, HIGH);
+}
 
 static void enter_sleep() {
     pinMode(PS2_CLK, INPUT);
@@ -102,6 +109,7 @@ void loop() {
     static bool          boot_grace = true;
     static uint8_t       was_moving = 0;
     static unsigned long last_ps2_ms = 0;
+    static unsigned long last_read_ms = 0;
     static int32_t       base_x = 0, base_y = 0;
 
 #define BASELINE_SHIFT  5
@@ -111,36 +119,41 @@ void loop() {
     uint8_t buttons;
 
     if (digitalRead(TOUCH_PIN) == HIGH) {
-        if (ps2.readPacket(x, y, buttons)) {
-            idle_start = 0;
-            boot_grace = false;
-            last_ps2_ms = millis();
+        unsigned long now = millis();
+        if (now - last_read_ms >= READ_INTERVAL_MS) {
+            last_read_ms = now;
+            if (ps2.readPacket(x, y, buttons)) {
+                idle_start = 0;
+                boot_grace = false;
+                last_ps2_ms = millis();
 
-            if (wake_discard) {
-                wake_discard--;
-            } else if (abs(x) >= 127 || abs(y) >= 127) {
-            } else {
-                int32_t cx = (int32_t)x - (base_x >> BASELINE_SHIFT);
-                int32_t cy = (int32_t)y - (base_y >> BASELINE_SHIFT);
+                if (wake_discard) {
+                    wake_discard--;
+                } else if (abs(x) >= 127 || abs(y) >= 127) {
+                } else {
+                    int32_t cx = (int32_t)x - (base_x >> BASELINE_SHIFT);
+                    int32_t cy = (int32_t)y - (base_y >> BASELINE_SHIFT);
 
-                if (abs(cx) < BASELINE_FREEZE && abs(cy) < BASELINE_FREEZE) {
-                    base_x += (int32_t)x - (base_x >> BASELINE_SHIFT);
-                    base_y += (int32_t)y - (base_y >> BASELINE_SHIFT);
-                }
+                    if (abs(cx) < BASELINE_FREEZE && abs(cy) < BASELINE_FREEZE) {
+                        base_x += (int32_t)x - (base_x >> BASELINE_SHIFT);
+                        base_y += (int32_t)y - (base_y >> BASELINE_SHIFT);
+                    }
 
-                x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
-                y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
+                    x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
+                    y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
 
-                if (abs(x) < 3 && abs(y) < 3) {
-                    x = 0; y = 0;
-                }
-                burst_x = x;
-                burst_y = y;
-                if (burst_x || burst_y) {
-                    Serial.print(burst_x);
-                    Serial.print(",");
-                    Serial.println(burst_y);
-                    was_moving = 1;
+                    if (abs(x) < 3 && abs(y) < 3) {
+                        x = 0; y = 0;
+                    }
+                    burst_x = x;
+                    burst_y = y;
+                    if (burst_x || burst_y) {
+                        Serial.print(burst_x);
+                        Serial.print(",");
+                        Serial.println(burst_y);
+                        was_moving = 1;
+                        pulse_mot();
+                    }
                 }
             }
         }
