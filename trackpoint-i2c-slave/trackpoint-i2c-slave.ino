@@ -23,6 +23,7 @@ static uint8_t cur_addr;
 static int8_t  burst_x;
 static int8_t  burst_y;
 static uint8_t wake_discard = 5;
+static bool    converge_fast = true;
 
 void requestEvent() {
     if (cur_addr == BURST_ADDR) {
@@ -73,6 +74,7 @@ static void enter_sleep() {
     burst_y = 0;
     cur_addr = 0;
     wake_discard = 5;
+    converge_fast = true;
 
     Serial.println("Woke!");
 }
@@ -120,12 +122,17 @@ void loop() {
                 wake_discard--;
             } else if (abs(x) >= 127 || abs(y) >= 127) {
             } else {
-                int32_t cx = (int32_t)x - (base_x >> BASELINE_SHIFT);
-                int32_t cy = (int32_t)y - (base_y >> BASELINE_SHIFT);
+                uint8_t shift = converge_fast ? 4 : BASELINE_SHIFT;
+                int32_t cx = (int32_t)x - (base_x >> shift);
+                int32_t cy = (int32_t)y - (base_y >> shift);
 
-                if (abs(x) < BASELINE_FREEZE && abs(y) < BASELINE_FREEZE) {
-                    base_x += (int32_t)x - (base_x >> BASELINE_SHIFT);
-                    base_y += (int32_t)y - (base_y >> BASELINE_SHIFT);
+                if (abs(cx) < BASELINE_FREEZE && abs(cy) < BASELINE_FREEZE) {
+                    base_x += (int32_t)x - (base_x >> shift);
+                    base_y += (int32_t)y - (base_y >> shift);
+                }
+
+                if (converge_fast && cx == 0 && cy == 0) {
+                    converge_fast = false;
                 }
 
                 x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
