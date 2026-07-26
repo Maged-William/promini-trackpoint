@@ -140,36 +140,42 @@ void loop() {
                             calib_y = (int8_t)(calib_sum_y / calib_count);
                         }
                         calibrated = true;
-                    } else if (abs(x) < 127 && abs(y) < 127 && abs(x) <= MAX_DELTA && abs(y) <= MAX_DELTA) {
+                    } else if (abs(x) < 127 && abs(y) < 127) {
                         calib_sum_x += x;
                         calib_sum_y += y;
                         calib_count++;
+                    } else {
+                        burst_x = 0; burst_y = 0;
                     }
                 }
 
                 if (calibrated) {
-                    int32_t cx = (int32_t)x - calib_x;
-                    int32_t cy = (int32_t)y - calib_y;
+                    if (abs(x) >= 127 || abs(y) >= 127 || abs(x) > MAX_DELTA || abs(y) > MAX_DELTA) {
+                        burst_x = 0; burst_y = 0;
+                    } else {
+                        int32_t cx = (int32_t)x - calib_x;
+                        int32_t cy = (int32_t)y - calib_y;
 
-                    x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
-                    y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
+                        x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
+                        y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
 
-                    if (abs(x) < 3 && abs(y) < 3) {
-                        x = 0; y = 0;
-                    }
-                    burst_x = x;
-                    burst_y = y;
-                    if (burst_x || burst_y) {
-                        Serial.print(burst_x);
-                        Serial.print(",");
-                        Serial.println(burst_y);
-                        was_moving = 1;
-                        pulse_mot();
-                        static uint16_t dbg_ctr = 0;
-                        if (++dbg_ctr % 10 == 0) {
-                            Serial.print("r"); Serial.print(raw_x); Serial.print(","); Serial.print(raw_y);
-                            Serial.print(" c"); Serial.print(calib_x); Serial.print(","); Serial.print(calib_y);
-                            Serial.print(" o"); Serial.print(burst_x); Serial.print(","); Serial.println(burst_y);
+                        if (abs(x) < 3 && abs(y) < 3) {
+                            x = 0; y = 0;
+                        }
+                        burst_x = x;
+                        burst_y = y;
+                        if (burst_x || burst_y) {
+                            Serial.print(burst_x);
+                            Serial.print(",");
+                            Serial.println(burst_y);
+                            was_moving = 1;
+                            pulse_mot();
+                            static uint16_t dbg_ctr = 0;
+                            if (++dbg_ctr % 10 == 0) {
+                                Serial.print("r"); Serial.print(raw_x); Serial.print(","); Serial.print(raw_y);
+                                Serial.print(" c"); Serial.print(calib_x); Serial.print(","); Serial.print(calib_y);
+                                Serial.print(" o"); Serial.print(burst_x); Serial.print(","); Serial.println(burst_y);
+                            }
                         }
                     }
                 }
