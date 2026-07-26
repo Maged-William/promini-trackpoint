@@ -102,7 +102,10 @@ void loop() {
     static bool          boot_grace = true;
     static uint8_t       was_moving = 0;
     static unsigned long last_ps2_ms = 0;
-    static int8_t        prev_x = 0, prev_y = 0;
+    static int32_t       base_x = 0, base_y = 0;
+
+#define BASELINE_SHIFT  8
+#define BASELINE_FREEZE 8
 
     int8_t x, y;
     uint8_t buttons;
@@ -112,24 +115,32 @@ void loop() {
             idle_start = 0;
             boot_grace = false;
             last_ps2_ms = millis();
-            if (abs(x) >= 127 || abs(y) >= 127) {
-            } else if (wake_discard) {
+
+            if (wake_discard) {
                 wake_discard--;
+            } else if (abs(x) >= 127 || abs(y) >= 127) {
             } else {
+                int32_t cx = (int32_t)x - (base_x >> BASELINE_SHIFT);
+                int32_t cy = (int32_t)y - (base_y >> BASELINE_SHIFT);
+
+                if (abs(x) < BASELINE_FREEZE && abs(y) < BASELINE_FREEZE) {
+                    base_x += (int32_t)x - (base_x >> BASELINE_SHIFT);
+                    base_y += (int32_t)y - (base_y >> BASELINE_SHIFT);
+                }
+
+                x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
+                y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
+
                 if (abs(x) < 3 && abs(y) < 3) {
                     x = 0; y = 0;
                 }
-                if (abs(x - prev_x) + abs(y - prev_y) > 60) {
-                } else {
-                    prev_x = x; prev_y = y;
-                    burst_x = x;
-                    burst_y = y;
-                    if (burst_x || burst_y) {
-                        Serial.print(burst_x);
-                        Serial.print(",");
-                        Serial.println(burst_y);
-                        was_moving = 1;
-                    }
+                burst_x = x;
+                burst_y = y;
+                if (burst_x || burst_y) {
+                    Serial.print(burst_x);
+                    Serial.print(",");
+                    Serial.println(burst_y);
+                    was_moving = 1;
                 }
             }
         }
