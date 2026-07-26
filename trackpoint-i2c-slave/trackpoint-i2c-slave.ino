@@ -24,8 +24,11 @@ PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 static uint8_t cur_addr;
 static int8_t  burst_x;
 static int8_t  burst_y;
-static unsigned long wake_deadline = 0;
-static int32_t       base_x = 0, base_y = 0;
+static bool          calibrated = false;
+static int8_t        calib_x = 0, calib_y = 0;
+static int32_t       calib_sum_x = 0, calib_sum_y = 0;
+static uint16_t      calib_count = 0;
+static unsigned long calib_end_ms = 0;
 
 
 void requestEvent() {
@@ -82,9 +85,11 @@ static void enter_sleep() {
     burst_x = 0;
     burst_y = 0;
     cur_addr = 0;
-    wake_deadline = millis() + 800;
-    base_x = 0;
-    base_y = 0;
+    calibrated = false;
+    calib_x = 0; calib_y = 0;
+    calib_sum_x = 0; calib_sum_y = 0;
+    calib_count = 0;
+    calib_end_ms = millis() + 400;
     Serial.println("Woke!");
 }
 
@@ -115,9 +120,6 @@ void loop() {
     static unsigned long last_ps2_ms = 0;
     static unsigned long last_read_ms = 0;
 
-#define BASELINE_SHIFT  5
-#define BASELINE_FREEZE 8
-
     int8_t x, y;
     uint8_t buttons;
 
@@ -131,17 +133,23 @@ void loop() {
                 boot_grace = false;
                 last_ps2_ms = millis();
 
-                if (millis() < wake_deadline) {
-                } else if (abs(x) >= 127 || abs(y) >= 127) {
-                } else if (abs(x) > MAX_DELTA || abs(y) > MAX_DELTA) {
-                } else {
-                    int32_t cx = (int32_t)x - (base_x >> BASELINE_SHIFT);
-                    int32_t cy = (int32_t)y - (base_y >> BASELINE_SHIFT);
-
-                    if (abs(cx) < BASELINE_FREEZE && abs(cy) < BASELINE_FREEZE) {
-                        base_x += (int32_t)x - (base_x >> BASELINE_SHIFT);
-                        base_y += (int32_t)y - (base_y >> BASELINE_SHIFT);
+                if (!calibrated) {
+                    if (millis() >= calib_end_ms) {
+                        if (calib_count > 0) {
+                            calib_x = (int8_t)(calib_sum_x / calib_count);
+                            calib_y = (int8_t)(calib_sum_y / calib_count);
+                        }
+                        calibrated = true;
+                    } else if (abs(x) < 127 && abs(y) < 127 && abs(x) <= MAX_DELTA && abs(y) <= MAX_DELTA) {
+                        calib_sum_x += x;
+                        calib_sum_y += y;
+                        calib_count++;
                     }
+                }
+
+                if (calibrated) {
+                    int32_t cx = (int32_t)x - calib_x;
+                    int32_t cy = (int32_t)y - calib_y;
 
                     x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
                     y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
@@ -160,7 +168,7 @@ void loop() {
                         static uint16_t dbg_ctr = 0;
                         if (++dbg_ctr % 10 == 0) {
                             Serial.print("r"); Serial.print(raw_x); Serial.print(","); Serial.print(raw_y);
-                            Serial.print(" b"); Serial.print(base_x >> BASELINE_SHIFT); Serial.print(","); Serial.print(base_y >> BASELINE_SHIFT);
+                            Serial.print(" c"); Serial.print(calib_x); Serial.print(","); Serial.print(calib_y);
                             Serial.print(" o"); Serial.print(burst_x); Serial.print(","); Serial.println(burst_y);
                         }
                     }
