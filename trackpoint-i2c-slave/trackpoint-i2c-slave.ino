@@ -150,6 +150,8 @@ void loop() {
             idle_start = millis();
         } else if (millis() - idle_start >= IDLE_TIMEOUT_MS) {
             idle_start = 0;
+            Serial.println("Sleeping...");
+            Serial.flush();
             TWCR = 0;
             attachInterrupt(digitalPinToInterrupt(TOUCH_PIN), wakeUp, RISING);
             LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
@@ -157,6 +159,7 @@ void loop() {
             Wire.begin(I2C_ADDR);
             Wire.onRequest(requestEvent);
             Wire.onReceive(receiveEvent);
+            Serial.println("Woke!");
         }
     } else {
         idle_start = 0;
