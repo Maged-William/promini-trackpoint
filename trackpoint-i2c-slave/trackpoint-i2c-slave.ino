@@ -8,8 +8,8 @@
 #define PMOS_PIN     6
 #define LED_PIN      13
 
-#define PS2_CLK      3
-#define PS2_DAT      7
+#define PS2_CLK      2
+#define PS2_DAT      3
 
 #define BURST_ADDR    0x12
 
