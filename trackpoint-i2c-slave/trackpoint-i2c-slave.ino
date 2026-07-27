@@ -15,6 +15,7 @@
 
 #define READ_INTERVAL_MS 20
 #define MAX_DELTA 25
+#define DEADBAND 3
 #define IDLE_TIMEOUT_MS 1000
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
@@ -111,7 +112,7 @@ void loop() {
 
                     burst_x = x;
                     burst_y = y;
-                    if (burst_x || burst_y) {
+                    if (abs(burst_x) > DEADBAND || abs(burst_y) > DEADBAND) {
                         Serial.print(burst_x);
                         Serial.print(",");
                         Serial.println(burst_y);
@@ -173,7 +174,7 @@ void loop() {
                         int32_t cy = (int32_t)y - calib_y;
                         x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
                         y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
-                        if (x || y) {
+                        if (abs(x) > DEADBAND || abs(y) > DEADBAND) {
                             burst_x = x;
                             burst_y = y;
                             Serial.print("W:");
