@@ -17,6 +17,7 @@
 #define MAX_DELTA 25
 #define DEADBAND 3
 #define IDLE_TIMEOUT_MS 1000
+#define SERIAL_LOG 0
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
@@ -64,8 +65,10 @@ void setup() {
 
     ps2.begin();
 
-    Serial.begin(115200);
-    Serial.println("--- I2C Slave + PS/2 + CLK-inhibit WDT Sleep ---");
+    if (SERIAL_LOG) {
+        Serial.begin(115200);
+        Serial.println("--- I2C Slave + PS/2 + CLK-inhibit WDT Sleep ---");
+    }
 
     last_motion_ms = millis();
 }
@@ -113,9 +116,11 @@ void loop() {
                     burst_x = x;
                     burst_y = y;
                     if (abs(burst_x) > DEADBAND || abs(burst_y) > DEADBAND) {
-                        Serial.print(burst_x);
-                        Serial.print(",");
-                        Serial.println(burst_y);
+                        if (SERIAL_LOG) {
+                            Serial.print(burst_x);
+                            Serial.print(",");
+                            Serial.println(burst_y);
+                        }
                         was_moving = 1;
                         pulse_mot();
                         last_motion_ms = millis();
@@ -130,15 +135,17 @@ void loop() {
             burst_x = 0;
             burst_y = 0;
             if (was_moving) {
-                Serial.println("0");
+                if (SERIAL_LOG) Serial.println("0");
                 was_moving = 0;
             }
         }
     }
 
     if (millis() - last_motion_ms >= IDLE_TIMEOUT_MS) {
-        Serial.println("Sleeping...");
-        Serial.flush();
+        if (SERIAL_LOG) {
+            Serial.println("Sleeping...");
+            Serial.flush();
+        }
 
         pinMode(PS2_CLK, OUTPUT);
         digitalWrite(PS2_CLK, LOW);
@@ -177,15 +184,17 @@ void loop() {
                         if (abs(x) > DEADBAND || abs(y) > DEADBAND) {
                             burst_x = x;
                             burst_y = y;
-                            Serial.print("W:");
-                            Serial.print(burst_x);
-                            Serial.print(",");
-                            Serial.println(burst_y);
+                            if (SERIAL_LOG) {
+                                Serial.print("W:");
+                                Serial.print(burst_x);
+                                Serial.print(",");
+                                Serial.println(burst_y);
+                            }
                             was_moving = 1;
                             pulse_mot();
                             last_motion_ms = millis();
                             last_ps2_ms = millis();
-                            Serial.println("Woke!");
+                            if (SERIAL_LOG) Serial.println("Woke!");
                             break;
                         }
                     }
