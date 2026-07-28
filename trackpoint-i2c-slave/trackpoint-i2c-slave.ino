@@ -8,8 +8,8 @@
 #define PMOS_PIN     6
 #define LED_PIN      13
 
-#define PS2_CLK      3
-#define PS2_DAT      7
+#define PS2_CLK      7
+#define PS2_DAT      3
 
 #define BURST_ADDR    0x12
 
@@ -67,7 +67,7 @@ void setup() {
 
     if (SERIAL_LOG) {
         Serial.begin(115200);
-        Serial.println("--- I2C Slave + PS/2 + CLK-inhibit WDT Sleep ---");
+        Serial.println("--- Exp26 — PS/2 DAT D3 CLK D7 ---");
     }
 
     last_motion_ms = millis();
