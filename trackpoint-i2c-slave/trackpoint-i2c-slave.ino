@@ -169,7 +169,6 @@ void loop() {
 
         pinMode(PS2_CLK, OUTPUT);
         digitalWrite(PS2_CLK, LOW);
-        TWCR = 0;
 
         while (1) {
             LowPower.powerDown(SLEEP_60MS, ADC_OFF, BOD_OFF);
@@ -180,10 +179,6 @@ void loop() {
                 Serial.print("SLP:");
                 Serial.println(wake_count);
             }
-
-            Wire.begin(I2C_ADDR);
-            Wire.onRequest(requestEvent);
-            Wire.onReceive(receiveEvent);
 
             pinMode(PS2_CLK, INPUT_PULLUP);
 
@@ -234,7 +229,6 @@ void loop() {
                 }
             }
 
-            TWCR = 0;
             pinMode(PS2_CLK, OUTPUT);
             digitalWrite(PS2_CLK, LOW);
         }
