@@ -162,6 +162,8 @@ void loop() {
     }
 
     if (millis() - last_motion_ms >= IDLE_TIMEOUT_MS) {
+        burst_x = 0;
+        burst_y = 0;
         if (SERIAL_LOG) {
             Serial.println("Sleeping...");
             Serial.flush();
@@ -173,6 +175,8 @@ void loop() {
         while (1) {
             TWCR &= ~_BV(TWEA);
             LowPower.powerDown(SLEEP_60MS, ADC_OFF, BOD_OFF);
+            burst_x = 0;
+            burst_y = 0;
             TWCR |= _BV(TWEA);
 
             wake_count++;
