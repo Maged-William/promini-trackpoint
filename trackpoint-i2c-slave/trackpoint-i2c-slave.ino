@@ -19,7 +19,7 @@
 #define MAX_DELTA 25
 #define DEADBAND 3
 #define IDLE_TIMEOUT_MS 5000
-#define SERIAL_LOG 0
+#define SERIAL_LOG 1
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
