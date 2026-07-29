@@ -173,7 +173,7 @@ void loop() {
         digitalWrite(PS2_CLK, LOW);
 
         while (1) {
-            LowPower.idle(SLEEP_60MS, ADC_OFF);
+            LowPower.idle(SLEEP_60MS, ADC_OFF, BOD_OFF);
             burst_x = 0;
             burst_y = 0;
 
