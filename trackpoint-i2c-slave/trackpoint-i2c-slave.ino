@@ -35,11 +35,15 @@ static int32_t       calib_sum_x = 0, calib_sum_y = 0;
 static uint16_t      calib_count = 0;
 static unsigned long calib_end_ms = 0;
 static unsigned long last_motion_ms = 0;
+static uint16_t      wake_count = 0;
 
 
 void requestEvent() {
     if (cur_addr == BURST_ADDR) {
         uint8_t buf[2] = { (uint8_t)burst_x, (uint8_t)burst_y };
+        Wire.write(buf, 2);
+    } else if (cur_addr == 0x01) {
+        uint8_t buf[2] = { (uint8_t)(wake_count >> 8), (uint8_t)wake_count };
         Wire.write(buf, 2);
     } else {
         Wire.write(0x00);
@@ -169,6 +173,13 @@ void loop() {
 
         while (1) {
             LowPower.powerDown(SLEEP_60MS, ADC_OFF, BOD_OFF);
+
+            wake_count++;
+            digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+            if (SERIAL_LOG && (wake_count % 100 == 0)) {
+                Serial.print("SLP:");
+                Serial.println(wake_count);
+            }
 
             Wire.begin(I2C_ADDR);
             Wire.onRequest(requestEvent);
