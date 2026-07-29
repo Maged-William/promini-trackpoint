@@ -171,7 +171,9 @@ void loop() {
         digitalWrite(PS2_CLK, LOW);
 
         while (1) {
+            TWCR &= ~_BV(TWEA);
             LowPower.powerDown(SLEEP_60MS, ADC_OFF, BOD_OFF);
+            TWCR |= _BV(TWEA);
 
             wake_count++;
             if (SERIAL_LOG && (wake_count % 100 == 0)) {
