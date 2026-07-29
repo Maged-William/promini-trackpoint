@@ -11,19 +11,20 @@
 #define PS2_CLK      7
 #define PS2_DAT      3
 
-#define BURST_ADDR    0x12
+#define BURST_ADDR     0x12
+#define SPEED_REG      0x11
+#define SPEED_DEFAULT  255
 
 #define READ_INTERVAL_MS 20
 #define MAX_DELTA 25
 #define DEADBAND 3
-#define SPEED_SCALE_NUM 4
-#define SPEED_SCALE_DEN 5
 #define IDLE_TIMEOUT_MS 30000
 #define SERIAL_LOG 1
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
 static uint8_t cur_addr;
+static uint8_t speed_scale = SPEED_DEFAULT;
 static int8_t  burst_x;
 static int8_t  burst_y;
 static int16_t rem_x = 0;
@@ -46,7 +47,12 @@ void requestEvent() {
 }
 
 void receiveEvent(int len) {
-    if (len > 0) cur_addr = Wire.read();
+    if (len > 0) {
+        cur_addr = Wire.read();
+        if (len > 1 && cur_addr == SPEED_REG) {
+            speed_scale = Wire.read();
+        }
+    }
 }
 
 static void pulse_mot() {
@@ -117,12 +123,12 @@ void loop() {
                     x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
                     y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
 
-                    int32_t tx = (int32_t)x * SPEED_SCALE_NUM + rem_x;
-                    int32_t ty = (int32_t)y * SPEED_SCALE_NUM + rem_y;
-                    int8_t sx = tx / SPEED_SCALE_DEN;
-                    int8_t sy = ty / SPEED_SCALE_DEN;
-                    rem_x = tx - sx * SPEED_SCALE_DEN;
-                    rem_y = ty - sy * SPEED_SCALE_DEN;
+                    int32_t tx = (int32_t)x * speed_scale + rem_x;
+                    int32_t ty = (int32_t)y * speed_scale + rem_y;
+                    int8_t sx = tx / 256;
+                    int8_t sy = ty / 256;
+                    rem_x = tx - sx * 256;
+                    rem_y = ty - sy * 256;
                     burst_x = sx;
                     burst_y = sy;
                     if (abs(burst_x) > DEADBAND || abs(burst_y) > DEADBAND) {
@@ -192,12 +198,12 @@ void loop() {
                         x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
                         y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
                         if (abs(x) > DEADBAND || abs(y) > DEADBAND) {
-                            int32_t tx = (int32_t)x * SPEED_SCALE_NUM + rem_x;
-                            int32_t ty = (int32_t)y * SPEED_SCALE_NUM + rem_y;
-                            int8_t sx = tx / SPEED_SCALE_DEN;
-                            int8_t sy = ty / SPEED_SCALE_DEN;
-                            rem_x = tx - sx * SPEED_SCALE_DEN;
-                            rem_y = ty - sy * SPEED_SCALE_DEN;
+                            int32_t tx = (int32_t)x * speed_scale + rem_x;
+                            int32_t ty = (int32_t)y * speed_scale + rem_y;
+                            int8_t sx = tx / 256;
+                            int8_t sy = ty / 256;
+                            rem_x = tx - sx * 256;
+                            rem_y = ty - sy * 256;
                             burst_x = sx;
                             burst_y = sy;
                             if (SERIAL_LOG) {
