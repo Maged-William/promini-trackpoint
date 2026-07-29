@@ -232,5 +232,6 @@ void loop() {
             pinMode(PS2_CLK, OUTPUT);
             digitalWrite(PS2_CLK, LOW);
         }
+        if (SERIAL_LOG) Serial.println("AWAKE");
     }
 }
