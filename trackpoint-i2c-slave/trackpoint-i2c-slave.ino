@@ -174,7 +174,6 @@ void loop() {
             LowPower.powerDown(SLEEP_60MS, ADC_OFF, BOD_OFF);
 
             wake_count++;
-            digitalWrite(LED_PIN, !digitalRead(LED_PIN));
             if (SERIAL_LOG && (wake_count % 100 == 0)) {
                 Serial.print("SLP:");
                 Serial.println(wake_count);
