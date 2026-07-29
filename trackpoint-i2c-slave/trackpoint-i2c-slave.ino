@@ -16,6 +16,8 @@
 #define READ_INTERVAL_MS 20
 #define MAX_DELTA 25
 #define DEADBAND 3
+#define SPEED_SCALE_NUM 4
+#define SPEED_SCALE_DEN 5
 #define IDLE_TIMEOUT_MS 30000
 #define SERIAL_LOG 1
 
@@ -24,6 +26,8 @@ PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 static uint8_t cur_addr;
 static int8_t  burst_x;
 static int8_t  burst_y;
+static int16_t rem_x = 0;
+static int16_t rem_y = 0;
 static bool          calibrated = false;
 static int8_t        calib_x = 0, calib_y = 0;
 static int32_t       calib_sum_x = 0, calib_sum_y = 0;
@@ -113,8 +117,14 @@ void loop() {
                     x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
                     y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
 
-                    burst_x = x;
-                    burst_y = y;
+                    int32_t tx = (int32_t)x * SPEED_SCALE_NUM + rem_x;
+                    int32_t ty = (int32_t)y * SPEED_SCALE_NUM + rem_y;
+                    int8_t sx = tx / SPEED_SCALE_DEN;
+                    int8_t sy = ty / SPEED_SCALE_DEN;
+                    rem_x = tx - sx * SPEED_SCALE_DEN;
+                    rem_y = ty - sy * SPEED_SCALE_DEN;
+                    burst_x = sx;
+                    burst_y = sy;
                     if (abs(burst_x) > DEADBAND || abs(burst_y) > DEADBAND) {
                         if (SERIAL_LOG) {
                             Serial.print(burst_x);
@@ -182,8 +192,14 @@ void loop() {
                         x = (cx < -128) ? -128 : (cx > 127) ? 127 : (int8_t)cx;
                         y = (cy < -128) ? -128 : (cy > 127) ? 127 : (int8_t)cy;
                         if (abs(x) > DEADBAND || abs(y) > DEADBAND) {
-                            burst_x = x;
-                            burst_y = y;
+                            int32_t tx = (int32_t)x * SPEED_SCALE_NUM + rem_x;
+                            int32_t ty = (int32_t)y * SPEED_SCALE_NUM + rem_y;
+                            int8_t sx = tx / SPEED_SCALE_DEN;
+                            int8_t sy = ty / SPEED_SCALE_DEN;
+                            rem_x = tx - sx * SPEED_SCALE_DEN;
+                            rem_y = ty - sy * SPEED_SCALE_DEN;
+                            burst_x = sx;
+                            burst_y = sy;
                             if (SERIAL_LOG) {
                                 Serial.print("W:");
                                 Serial.print(burst_x);
