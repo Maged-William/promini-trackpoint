@@ -1,6 +1,9 @@
 #include <Wire.h>
 #include <PS2Trackpoint.h>
 #include <LowPower.h>
+#include <avr/sleep.h>
+#include <avr/wdt.h>
+#include <avr/interrupt.h>
 
 #define I2C_ADDR     0x42
 #define MOT_PIN      14
@@ -173,7 +176,16 @@ void loop() {
         digitalWrite(PS2_CLK, LOW);
 
         while (1) {
-            LowPower.idle(SLEEP_60MS, ADC_OFF, BOD_OFF);
+            MCUSR &= ~(1<<WDRF);
+            WDTCSR |= (1<<WDCE) | (1<<WDE);
+            WDTCSR = (1<<WDIE) | (1<<WDP0) | (1<<WDP2);
+            set_sleep_mode(SLEEP_MODE_IDLE);
+            sleep_enable();
+            sei();
+            sleep_cpu();
+            sleep_disable();
+            WDTCSR |= (1<<WDCE) | (1<<WDE);
+            WDTCSR = 0;
             burst_x = 0;
             burst_y = 0;
 
