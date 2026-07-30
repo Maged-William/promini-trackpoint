@@ -1,8 +1,10 @@
 #include <Wire.h>
 #include <PS2Trackpoint.h>
+#if SLEEP_ENABLED
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 #include <avr/interrupt.h>
+#endif
 
 #define I2C_ADDR     0x42
 #define MOT_PIN      14
@@ -18,6 +20,7 @@
 #define MAX_DELTA 25
 #define DEADBAND 3
 #define IDLE_TIMEOUT_MS 5000
+#define SLEEP_ENABLED 0
 #define SERIAL_LOG 1
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
@@ -126,6 +129,7 @@ void loop() {
         }
     }
 
+#if SLEEP_ENABLED
     if (millis() - last_motion_ms >= IDLE_TIMEOUT_MS) {
         burst_x = 0;
         burst_y = 0;
@@ -191,4 +195,5 @@ void loop() {
         }
         if (SERIAL_LOG) Serial.println("AWAKE");
     }
+#endif
 }
