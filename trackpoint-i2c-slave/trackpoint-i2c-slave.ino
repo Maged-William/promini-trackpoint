@@ -22,7 +22,7 @@
 #define MAX_DELTA 25
 #define DEADBAND 3
 #define IDLE_TIMEOUT_MS 5000
-#define SERIAL_LOG 1
+#define SERIAL_LOG 1 /* 1 = log wake/sleep transitions only, 0 = fully silent */
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
@@ -66,10 +66,9 @@ void setup() {
 
     ps2.begin();
 
-    if (SERIAL_LOG) {
-        Serial.begin(115200);
-        Serial.println("--- Exp36 — MOT level-based sleep gate ---");
-    }
+#if SERIAL_LOG
+    Serial.begin(115200);
+#endif
 
     last_motion_ms = millis();
 }
@@ -100,11 +99,6 @@ void loop() {
                 burst_x = sx;
                 burst_y = sy;
                 if (abs(burst_x) > DEADBAND || abs(burst_y) > DEADBAND) {
-                    if (SERIAL_LOG) {
-                        Serial.print(burst_x);
-                        Serial.print(",");
-                        Serial.println(burst_y);
-                    }
                     was_moving = 1;
                     last_motion_ms = millis();
                 }
@@ -117,7 +111,6 @@ void loop() {
             burst_x = 0;
             burst_y = 0;
             if (was_moving) {
-                if (SERIAL_LOG) Serial.println("0");
                 was_moving = 0;
             }
         }
@@ -127,10 +120,10 @@ void loop() {
     if (millis() - last_motion_ms >= IDLE_TIMEOUT_MS) {
         burst_x = 0;
         burst_y = 0;
-        if (SERIAL_LOG) {
-            Serial.println("Sleeping...");
-            Serial.flush();
-        }
+#if SERIAL_LOG
+        Serial.println("Sleeping...");
+        Serial.flush();
+#endif
 
         pinMode(PS2_CLK, OUTPUT);
         digitalWrite(PS2_CLK, LOW);
@@ -153,10 +146,6 @@ void loop() {
             burst_y = 0;
 
             wake_count++;
-            if (SERIAL_LOG && (wake_count % 100 == 0)) {
-                Serial.print("SLP:");
-                Serial.println(wake_count);
-            }
 
             pinMode(PS2_CLK, INPUT_PULLUP);
 
@@ -171,18 +160,14 @@ void loop() {
                         rem_y = ty - sy * 256;
                         burst_x = sx;
                         burst_y = sy;
-                        if (SERIAL_LOG) {
-                            Serial.print("W:");
-                            Serial.print(burst_x);
-                            Serial.print(",");
-                            Serial.println(burst_y);
-                        }
                         was_moving = 1;
                         Wire.begin(I2C_ADDR);
                         digitalWrite(MOT_PIN, HIGH);
                         last_motion_ms = millis();
                         last_ps2_ms = millis();
-                        if (SERIAL_LOG) Serial.println("Woke!");
+#if SERIAL_LOG
+                        Serial.println("Woke!");
+#endif
                         break;
                     }
                 }
@@ -191,7 +176,6 @@ void loop() {
             pinMode(PS2_CLK, OUTPUT);
             digitalWrite(PS2_CLK, LOW);
         }
-        if (SERIAL_LOG) Serial.println("AWAKE");
     }
 #endif
 }
