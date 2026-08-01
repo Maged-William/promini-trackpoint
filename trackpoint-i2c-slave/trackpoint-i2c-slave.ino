@@ -1,3 +1,5 @@
+#define SLEEP_ENABLED 1
+
 #include <Wire.h>
 #include <PS2Trackpoint.h>
 #if SLEEP_ENABLED
@@ -20,7 +22,6 @@
 #define MAX_DELTA 25
 #define DEADBAND 3
 #define IDLE_TIMEOUT_MS 5000
-#define SLEEP_ENABLED 0
 #define SERIAL_LOG 1
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
@@ -55,12 +56,6 @@ void receiveEvent(int len) {
     }
 }
 
-static void pulse_mot() {
-    digitalWrite(MOT_PIN, LOW);
-    delayMicroseconds(100);
-    digitalWrite(MOT_PIN, HIGH);
-}
-
 void setup() {
     pinMode(MOT_PIN, OUTPUT);
     digitalWrite(MOT_PIN, HIGH);
@@ -73,7 +68,7 @@ void setup() {
 
     if (SERIAL_LOG) {
         Serial.begin(115200);
-        Serial.println("--- Exp26 — PS/2 DAT D3 CLK D7 ---");
+        Serial.println("--- Exp36 — MOT level-based sleep gate ---");
     }
 
     last_motion_ms = millis();
@@ -111,7 +106,6 @@ void loop() {
                         Serial.println(burst_y);
                     }
                     was_moving = 1;
-                    pulse_mot();
                     last_motion_ms = millis();
                 }
             }
@@ -140,6 +134,9 @@ void loop() {
 
         pinMode(PS2_CLK, OUTPUT);
         digitalWrite(PS2_CLK, LOW);
+
+        digitalWrite(MOT_PIN, LOW);
+        TWCR = 0;
 
         while (1) {
             MCUSR &= ~(1<<WDRF);
@@ -181,7 +178,8 @@ void loop() {
                             Serial.println(burst_y);
                         }
                         was_moving = 1;
-                        pulse_mot();
+                        Wire.begin(I2C_ADDR);
+                        digitalWrite(MOT_PIN, HIGH);
                         last_motion_ms = millis();
                         last_ps2_ms = millis();
                         if (SERIAL_LOG) Serial.println("Woke!");
