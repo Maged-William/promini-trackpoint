@@ -1,4 +1,4 @@
-#define SLEEP_ENABLED 1
+#define SLEEP_ENABLED 0
 
 #include <Wire.h>
 #include <PS2Trackpoint.h>
