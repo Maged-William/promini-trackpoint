@@ -1,12 +1,12 @@
-#define SLEEP_ENABLED 1
+#define SLEEP_ENABLED 0 /* Exp43 debug: stay awake, continuous live display */
 #define SERIAL_LOG 0 /* ATtiny85 has no UART and all 6 GPIOs are in use */
 
 /*
-  Exp42 — OLED isolation test for the ATtiny85 trackpoint.
+  Exp43 — OLED debug: show the raw PS/2 packet bytes + parsed X/Y.
 
-  Reads the PS/2 trackpoint and shows live X/Y on a 0.91" SSD1306 OLED
-  (128x32). The OLED rides the USI I2C pins in MASTER mode — the same
-  PB0/PB2 wires that will later go to the NiceNano slave bus.
+  The slave build reads xraw=0 from this trackpoint while the OLED build
+  showed X values. This debug displays the raw status/xraw/yraw bytes so
+  we can see exactly what the trackpoint sends standalone (no I2C slave).
 
   Pins:
     0 (PB0) = SDA (USI I2C master) -> OLED SDA      physical pin 5
@@ -18,6 +18,7 @@
 
 #include <Tiny4kOLED.h>
 #include <PS2Trackpoint.h>
+#include <avr/power.h>
 #if SLEEP_ENABLED
 #include <avr/sleep.h>
 #include <avr/wdt.h>
@@ -34,38 +35,39 @@
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
-static int8_t        last_x = 0;
-static int8_t        last_y = 0;
-static unsigned long last_motion_ms = 0;
+static int8_t  last_x = 0;
+static int8_t  last_y = 0;
+static uint8_t last_s = 0xFF;
+static uint8_t last_xr = 0xFF;
+static uint8_t last_yr = 0xFF;
 
-void showXY(int8_t x, int8_t y) {
+void showPacket() {
     oled.clear();
     oled.setCursor(0, 0);
-    oled.print(F("X: "));
-    oled.print(x);
+    oled.print(F("S:"));
+    oled.print(ps2.last_status, HEX);
+    oled.print(F(" X:"));
+    oled.print(ps2.last_xraw, HEX);
+    oled.print(F(" Y:"));
+    oled.print(ps2.last_yraw, HEX);
     oled.setCursor(0, 2);
-    oled.print(F("Y: "));
-    oled.print(y);
-    oled.switchFrame();
-}
-
-void showSleep() {
-    oled.clear();
-    oled.setCursor(32, 1);
-    oled.print(F("SLEEP"));
+    oled.print(F("X:"));
+    oled.print(last_x);
+    oled.print(F(" Y:"));
+    oled.print(last_y);
     oled.switchFrame();
 }
 
 void setup() {
+    clock_prescale_set(clock_div_1); /* 8 MHz (fuse CKDIV8 stays set; software override only) */
     oled.begin();
     oled.setFont(FONT8X16);
     oled.clear();
     oled.on();
 
     ps2.begin();
-    last_motion_ms = millis();
 
-    showXY(0, 0);
+    showPacket();
 }
 
 void loop() {
@@ -81,53 +83,14 @@ void loop() {
             if (abs(x) >= 127 || abs(y) >= 127 || abs(x) > MAX_DELTA || abs(y) > MAX_DELTA) {
                 x = 0; y = 0;
             }
-            if (abs(x) > DEADBAND || abs(y) > DEADBAND) {
-                last_motion_ms = millis();
-            }
-            if (x != last_x || y != last_y) {
-                last_x = x;
-                last_y = y;
-                showXY(x, y);
+            last_x = x;
+            last_y = y;
+            if (ps2.last_status != last_s || ps2.last_xraw != last_xr || ps2.last_yraw != last_yr) {
+                last_s = ps2.last_status;
+                last_xr = ps2.last_xraw;
+                last_yr = ps2.last_yraw;
+                showPacket();
             }
         }
     }
-
-#if SLEEP_ENABLED
-    if (millis() - last_motion_ms >= IDLE_TIMEOUT_MS) {
-        showSleep();
-
-        pinMode(PS2_CLK, OUTPUT);
-        digitalWrite(PS2_CLK, LOW);
-
-        while (1) {
-            MCUSR &= ~(1<<WDRF);
-            WDTCR |= (1<<WDCE) | (1<<WDE);
-            WDTCR = (1<<WDIE) | (1<<WDP0) | (1<<WDP2);
-            set_sleep_mode(SLEEP_MODE_IDLE);
-            sleep_enable();
-            sei();
-            sleep_cpu();
-            sleep_disable();
-            WDTCR |= (1<<WDCE) | (1<<WDE);
-            WDTCR = 0;
-
-            pinMode(PS2_CLK, INPUT_PULLUP);
-
-            if (ps2.readPacket(x, y, buttons)) {
-                if (!(abs(x) >= 127 || abs(y) >= 127 || abs(x) > MAX_DELTA || abs(y) > MAX_DELTA)) {
-                    if (abs(x) > DEADBAND || abs(y) > DEADBAND) {
-                        last_x = x;
-                        last_y = y;
-                        last_motion_ms = millis();
-                        showXY(x, y);
-                        break;
-                    }
-                }
-            }
-
-            pinMode(PS2_CLK, OUTPUT);
-            digitalWrite(PS2_CLK, LOW);
-        }
-    }
-#endif
 }
