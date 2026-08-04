@@ -67,8 +67,8 @@ void setup() {
     ps2.begin();
 
 #if SERIAL_LOG
-    Serial.begin(38400);
-    Serial.println("--- Exp46: I2C slave boot OK (38400) ---");
+    Serial.begin(9600);
+    Serial.println("--- Exp46: I2C slave boot OK (9600) ---");
 #endif
 
     last_motion_ms = millis();
