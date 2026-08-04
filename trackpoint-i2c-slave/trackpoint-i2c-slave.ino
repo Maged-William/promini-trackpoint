@@ -87,6 +87,12 @@ void loop() {
         if (ps2.readPacket(x, y, buttons)) {
             last_ps2_ms = millis();
 
+#if SERIAL_LOG
+            Serial.print("X:"); Serial.print(x);
+            Serial.print(" Y:"); Serial.print(y);
+            Serial.print(" B:"); Serial.println(buttons);
+#endif
+
             if (abs(x) >= 127 || abs(y) >= 127 || abs(x) > MAX_DELTA || abs(y) > MAX_DELTA) {
                 burst_x = 0; burst_y = 0;
             } else {
