@@ -1,7 +1,7 @@
-// Exp06: TrackPoint Serial Reader — final
+// Exp45: TrackPoint Serial Reader — sanity re-read
 // Reads 3-byte motion packets via PS2Trackpoint library.
 // This IC streams on power-up (no reset/enableStreaming needed).
-// Wiring: D7=CLK, D3=DAT (per AGENTS.md)
+// Wiring: CLK=D3, DAT=D7 (per AGENTS.md)
 
 #include <PS2Trackpoint.h>
 
@@ -10,17 +10,9 @@
 
 PS2Trackpoint ps2(CLK_PIN, DAT_PIN);
 
-#define NPN_GND_PIN 4
-#define PMOS_VCC_PIN 6
-
 void setup() {
-    pinMode(NPN_GND_PIN, OUTPUT);
-    digitalWrite(NPN_GND_PIN, HIGH);
-    pinMode(PMOS_VCC_PIN, OUTPUT);
-    digitalWrite(PMOS_VCC_PIN, LOW);
-
     Serial.begin(115200);
-    Serial.println("--- Exp06: TrackPoint Serial Reader ---");
+    Serial.println("--- Exp45: TrackPoint Serial Reader ---");
 
     ps2.begin();
     delay(2000);
