@@ -1,12 +1,12 @@
 // Exp45: TrackPoint Serial Reader — sanity re-read
 // Reads 3-byte motion packets via PS2Trackpoint library.
 // This IC streams on power-up (no reset/enableStreaming needed).
-// Wiring: CLK=D3, DAT=D7 (per AGENTS.md)
+// Wiring: CLK=D7, DAT=D3 (matches production slave Exp44 + AGENTS.md)
 
 #include <PS2Trackpoint.h>
 
-#define CLK_PIN  3
-#define DAT_PIN  7
+#define CLK_PIN  7
+#define DAT_PIN  3
 
 PS2Trackpoint ps2(CLK_PIN, DAT_PIN);
 
