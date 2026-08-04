@@ -68,6 +68,7 @@ void setup() {
 
 #if SERIAL_LOG
     Serial.begin(115200);
+    Serial.println("--- Exp46: I2C slave boot OK ---");
 #endif
 
     last_motion_ms = millis();
@@ -116,6 +117,15 @@ void loop() {
         if (millis() - last_ps2_ms > 100) {
             burst_x = 0;
             burst_y = 0;
+
+#if SERIAL_LOG
+            static unsigned long last_hb = 0;
+            if (millis() - last_hb >= 1000) {
+                last_hb = millis();
+                Serial.println("idle");
+            }
+#endif
+
             if (was_moving) {
                 was_moving = 0;
             }
