@@ -62,4 +62,15 @@ jobs:
           name: pro-mini-serial-test
           path: build-serial-test/
 
+      - name: Compile PS2 Bytes Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --output-dir build-ps2-bytes trackpoint-ps2-bytes/
+          rm -f build-ps2-bytes/*.elf build-ps2-bytes/*.bin build-ps2-bytes/*.with_bootloader.*
+
+      - name: Upload PS2 Bytes Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-ps2-bytes
+          path: build-ps2-bytes/
+
 
