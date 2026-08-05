@@ -88,7 +88,7 @@ void loop() {
 #if SERIAL_LOG
     if (now - last_hb_ms >= 500) {
         last_hb_ms = now;
-        Serial.println(".");
+        Serial.println(now);
     }
 #endif
 
