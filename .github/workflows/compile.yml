@@ -51,4 +51,15 @@ jobs:
           name: pro-mini-serial-reader
           path: build-serial/
 
+      - name: Compile Serial Test Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --output-dir build-serial-test serial-test/
+          rm -f build-serial-test/*.elf build-serial-test/*.bin build-serial-test/*.with_bootloader.*
+
+      - name: Upload Serial Test Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-serial-test
+          path: build-serial-test/
+
 
