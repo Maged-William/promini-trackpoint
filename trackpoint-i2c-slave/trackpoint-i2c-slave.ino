@@ -22,7 +22,7 @@
 #define MAX_DELTA 25
 #define DEADBAND 3
 #define IDLE_TIMEOUT_MS 5000
-#define SERIAL_LOG 1 /* 1 = log wake/sleep transitions only, 0 = fully silent */
+#define SERIAL_LOG 0 /* 1 = log wake/sleep transitions only, 0 = fully silent */
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
 
