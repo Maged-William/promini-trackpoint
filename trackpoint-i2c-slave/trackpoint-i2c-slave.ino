@@ -78,11 +78,20 @@ void loop() {
     static uint8_t       was_moving = 0;
     static unsigned long last_ps2_ms = 0;
     static unsigned long last_read_ms = 0;
+    static unsigned long last_hb_ms = 0;
 
     int8_t x, y;
     uint8_t buttons;
 
     unsigned long now = millis();
+
+#if SERIAL_LOG
+    if (now - last_hb_ms >= 500) {
+        last_hb_ms = now;
+        Serial.println(".");
+    }
+#endif
+
     if (now - last_read_ms >= READ_INTERVAL_MS) {
         last_read_ms = now;
         if (ps2.readPacket(x, y, buttons)) {
