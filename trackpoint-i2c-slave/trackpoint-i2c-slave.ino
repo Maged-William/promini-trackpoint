@@ -90,8 +90,7 @@ void loop() {
 
 #if SERIAL_LOG
             Serial.print("X:"); Serial.print(x);
-            Serial.print(" Y:"); Serial.print(y);
-            Serial.print(" B:"); Serial.println(buttons);
+            Serial.print(" Y:"); Serial.println(y);
 #endif
 
             if (abs(x) >= 127 || abs(y) >= 127 || abs(x) > MAX_DELTA || abs(y) > MAX_DELTA) {
