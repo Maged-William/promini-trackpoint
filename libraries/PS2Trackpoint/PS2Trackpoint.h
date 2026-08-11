@@ -21,8 +21,11 @@ public:
     uint16_t read_timeouts; /* Exp43: count of readByte idle-timeouts (0x00/0xFF/0xFE... returns) */
 
     /* Exp43 fix: discard packets whose |x| or |y| exceeds this (misaligned
-     * PS/2 reads produce clamped extremes like 127/-128). Tune per sensor. */
-    int8_t max_delta = 32;
+     * PS/2 reads produce clamped extremes like 127/-128). Tune per sensor.
+     * Exp59: 32 -> 127 — the 32 gate dropped legit fast-motion packets
+     * (|delta| >= 33), freezing the cursor and capping readings at 31.
+     * Misalignment is now caught by the read_timeouts mismatch check instead. */
+    int8_t max_delta = 127;
 
 private:
     uint8_t readByte(uint16_t timeout);
