@@ -2,6 +2,7 @@
 
 #include <Wire.h>
 #include <PS2Trackpoint.h>
+#include <PowerCurve.h>
 #if SLEEP_ENABLED
 #include <avr/sleep.h>
 #include <avr/wdt.h>
@@ -15,8 +16,7 @@
 #define PS2_DAT      3
 
 #define BURST_ADDR     0x12
-#define SPEED_REG      0x11
-#define SPEED_DEFAULT  255
+#define SPEED_REG      PowerCurve::REG_SENS
 
 #define READ_INTERVAL_MS 20
 #define MAX_DELTA 127
@@ -25,13 +25,11 @@
 #define SERIAL_LOG 0 /* 1 = log wake/sleep transitions only, 0 = fully silent */
 
 PS2Trackpoint ps2(PS2_CLK, PS2_DAT);
+PowerCurve curve;
 
 static uint8_t cur_addr;
-static uint8_t speed_scale = SPEED_DEFAULT;
 static int8_t  burst_x;
 static int8_t  burst_y;
-static int16_t rem_x = 0;
-static int16_t rem_y = 0;
 static unsigned long last_motion_ms = 0;
 static uint16_t      wake_count = 0;
 
@@ -48,11 +46,20 @@ void requestEvent() {
 }
 
 void receiveEvent(int len) {
-    if (len > 0) {
-        cur_addr = Wire.read();
-        if (len > 1 && cur_addr == SPEED_REG) {
-            speed_scale = Wire.read();
-        }
+    if (len <= 0) {
+        return;
+    }
+    cur_addr = Wire.read();
+    uint8_t b1 = 0, b2 = 0;
+    if (len > 1) b1 = Wire.read();
+    if (len > 2) b2 = Wire.read();
+
+    if (cur_addr == SPEED_REG) {
+        curve.setSens(b1);
+    } else if (cur_addr == PowerCurve::REG_RATE
+            || cur_addr == PowerCurve::REG_EXP
+            || cur_addr == PowerCurve::REG_START) {
+        curve.setParam(cur_addr, (uint16_t)b1 | ((uint16_t)b2 << 8));
     }
 }
 
@@ -65,6 +72,7 @@ void setup() {
     Wire.onReceive(receiveEvent);
 
     ps2.begin();
+    curve.begin();
 
 #if SERIAL_LOG
     Serial.begin(9600);
@@ -84,6 +92,8 @@ void loop() {
     uint8_t buttons;
 
     unsigned long now = millis();
+
+    curve.update(); /* rebuild LUT if a param landed at init (no-op otherwise) */
 
 #if SERIAL_LOG
     if (now - last_hb_ms >= 500) {
@@ -105,14 +115,7 @@ void loop() {
             if (abs(x) >= 127 || abs(y) >= 127 || abs(x) > MAX_DELTA || abs(y) > MAX_DELTA) {
                 burst_x = 0; burst_y = 0;
             } else {
-                int32_t tx = (int32_t)x * speed_scale + rem_x;
-                int32_t ty = (int32_t)y * speed_scale + rem_y;
-                int8_t sx = tx / 256;
-                int8_t sy = ty / 256;
-                rem_x = tx - sx * 256;
-                rem_y = ty - sy * 256;
-                burst_x = sx;
-                burst_y = sy;
+                curve.apply(x, y, burst_x, burst_y);
                 if (abs(burst_x) > DEADBAND || abs(burst_y) > DEADBAND) {
                     was_moving = 1;
                     last_motion_ms = millis();
@@ -176,14 +179,7 @@ void loop() {
             if (ps2.readPacket(x, y, buttons)) {
                 if (!(abs(x) >= 127 || abs(y) >= 127 || abs(x) > MAX_DELTA || abs(y) > MAX_DELTA)) {
                     if (abs(x) > DEADBAND || abs(y) > DEADBAND) {
-                        int32_t tx = (int32_t)x * speed_scale + rem_x;
-                        int32_t ty = (int32_t)y * speed_scale + rem_y;
-                        int8_t sx = tx / 256;
-                        int8_t sy = ty / 256;
-                        rem_x = tx - sx * 256;
-                        rem_y = ty - sy * 256;
-                        burst_x = sx;
-                        burst_y = sy;
+                        curve.apply(x, y, burst_x, burst_y);
                         was_moving = 1;
                         Wire.begin(I2C_ADDR);
                         digitalWrite(MOT_PIN, HIGH);
