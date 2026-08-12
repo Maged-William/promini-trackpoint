@@ -19,7 +19,7 @@
 #define SPEED_DEFAULT  255
 
 #define READ_INTERVAL_MS 20
-#define MAX_DELTA 25
+#define MAX_DELTA 127
 #define DEADBAND 3
 #define IDLE_TIMEOUT_MS 5000
 #define SERIAL_LOG 0 /* 1 = log wake/sleep transitions only, 0 = fully silent */
