@@ -1,10 +1,6 @@
 name: Compile Arduino Firmware
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   build:
@@ -27,10 +23,10 @@ jobs:
           arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build trackpoint-spi-slave/
           rm -f build/*.elf build/*.bin build/*.with_bootloader.*
 
-      - name: Compile Diagnostic Sketch
+      - name: Compile I2C Slave Sketch
         run: |
-          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-diag trackpoint-diag/
-          rm -f build-diag/*.elf build-diag/*.bin build-diag/*.with_bootloader.*
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-i2c trackpoint-i2c-slave/
+          rm -f build-i2c/*.elf build-i2c/*.bin build-i2c/*.with_bootloader.*
 
       - name: Upload SPI Slave Binary
         uses: actions/upload-artifact@v4
@@ -38,8 +34,43 @@ jobs:
           name: pro-mini-spi-slave
           path: build/
 
-      - name: Upload Diagnostic Binary
+      - name: Upload I2C Slave Binary
         uses: actions/upload-artifact@v4
         with:
-          name: pro-mini-diag
-          path: build-diag/
+          name: pro-mini-i2c-slave
+          path: build-i2c/
+
+      - name: Compile Serial Reader Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --libraries ./libraries --output-dir build-serial trackpoint-serial-reader/
+          rm -f build-serial/*.elf build-serial/*.bin build-serial/*.with_bootloader.*
+
+      - name: Upload Serial Reader Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-serial-reader
+          path: build-serial/
+
+      - name: Compile Serial Test Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --output-dir build-serial-test serial-test/
+          rm -f build-serial-test/*.elf build-serial-test/*.bin build-serial-test/*.with_bootloader.*
+
+      - name: Upload Serial Test Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-serial-test
+          path: build-serial-test/
+
+      - name: Compile PS2 Bytes Sketch
+        run: |
+          arduino-cli compile --fqbn arduino:avr:pro:cpu=8MHzatmega328 --output-dir build-ps2-bytes trackpoint-ps2-bytes/
+          rm -f build-ps2-bytes/*.elf build-ps2-bytes/*.bin build-ps2-bytes/*.with_bootloader.*
+
+      - name: Upload PS2 Bytes Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-mini-ps2-bytes
+          path: build-ps2-bytes/
+
+
